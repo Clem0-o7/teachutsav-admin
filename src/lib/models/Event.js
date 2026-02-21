@@ -32,7 +32,6 @@ const EventSchema = new mongoose.Schema({
   },
   tags: [{
     type: String,
-    enum: ["team", "individual", "coding", "puzzle", "experience", "reasoning", "ai", "business", "design", "other"],
     default: "other"
   }],
   

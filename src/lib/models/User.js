@@ -38,6 +38,8 @@ const userSchema = new Schema(
         rejectionReason: String,
         submittedDate: { type: Date, default: Date.now },
         verifiedDate: Date,
+        verifiedBy: String,        // Admin name who verified/rejected
+        verifiedByEmail: String,   // Admin email who verified/rejected
       },
     ],
 

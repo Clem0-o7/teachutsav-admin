@@ -2,6 +2,42 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+
+// Tags Enum
+const EVENT_TAGS = {
+  // Participation Type
+  TEAM: "team",
+  INDIVIDUAL: "individual",
+  
+  // Technical Categories
+  CODING: "coding",
+  AI_ML: "ai-ml",
+  DATA_SCIENCE: "data-science",
+  CYBERSECURITY: "cybersecurity",
+  AR_VR: "ar-vr",
+  
+  // Non-Technical Categories
+  BUSINESS: "business",
+  DESIGN: "design",
+  UI_UX: "ui-ux",
+  GRAPHICS: "graphics",
+  MARKETING: "marketing",
+  PRESENTATION: "presentation",
+  DEBATE: "debate",
+  QUIZ: "quiz",
+  
+  // Skill Type
+  PUZZLE: "puzzle",
+  REASONING: "reasoning",
+  LOGIC: "logic",
+  CREATIVE: "creative",
+  ANALYTICAL: "analytical",
+  PROBLEM_SOLVING: "problem-solving",
+  
+};
+
+// Convert enum to array for easy iteration
+const tagOptions = Object.values(EVENT_TAGS);
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import {
@@ -73,7 +109,7 @@ export default function EventsPage() {
     rulebook: null
   });
 
-  const tagOptions = ["team", "individual", "coding", "puzzle", "experience", "reasoning", "ai", "business", "design", "other"];
+
 
   // Fetch events
   const fetchEvents = async () => {
@@ -233,9 +269,9 @@ export default function EventsPage() {
       category: 'tech',
       eventMode: 'offline',
       tags: [],
-      eventTiming: '',
+      eventTiming: 'TBA',
       eventDate: '',
-      venue: '',
+      venue: 'TBA',
       eventAbstract: '',
       eventDesp: '',
       registrationRequired: false,
@@ -243,8 +279,8 @@ export default function EventsPage() {
       maxTeamSize: 1,
       minTeamSize: 1,
       registrationFee: 0,
-      incharge: '',
-      inchargeNumber: '',
+      incharge: 'Event Incharge',
+      inchargeNumber: '9966775544',
       coordinators: [],
       isActive: true,
       priority: 0
@@ -438,6 +474,37 @@ export default function EventsPage() {
                             </SelectContent>
                           </Select>
                         </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="tags">Event Tags</Label>
+                        <div className="flex flex-wrap gap-2 p-3 border rounded-md min-h-[48px] bg-background">
+                          {tagOptions.map((tag) => {
+                            const isSelected = formData.tags.includes(tag);
+                            return (
+                              <Badge
+                                key={tag}
+                                variant={isSelected ? "default" : "outline"}
+                                className={`cursor-pointer transition-colors ${
+                                  isSelected 
+                                    ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                                    : "hover:bg-muted"
+                                }`}
+                                onClick={() => {
+                                  const newTags = isSelected
+                                    ? formData.tags.filter(t => t !== tag)
+                                    : [...formData.tags, tag];
+                                  setFormData({ ...formData, tags: newTags });
+                                }}
+                              >
+                                {tag.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Click tags to select/deselect. Selected: {formData.tags.length}
+                        </p>
                       </div>
 
                       <div className="space-y-2">
