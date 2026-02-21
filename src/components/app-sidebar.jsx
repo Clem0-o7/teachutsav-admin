@@ -8,7 +8,6 @@ import {
   IconCalendarEvent,
   IconCreditCard,
   IconUsers,
-  IconSettings,
   IconLogout,
   IconInnerShadowTop,
   IconPresentation,
@@ -104,11 +103,6 @@ export function AppSidebar({
   const navItems = session?.user?.role ? getNavItems(session.user.role) : [];
 
   const navSecondary = [
-    {
-      title: "Settings", 
-      url: "/settings",
-      icon: IconSettings,
-    },
     {
       title: "Logout",
       onClick: handleLogout,
