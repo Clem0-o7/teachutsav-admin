@@ -27,9 +27,12 @@ export async function POST(request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    if (!['tech', 'nontech'].includes(category)) {
+    if (!['tech', 'nontech', 'non-tech'].includes(category)) {
       return NextResponse.json({ error: "Invalid category" }, { status: 400 });
     }
+
+    // Normalize 'non-tech' → 'nontech' for consistent blob folder naming
+    const normalizedCategory = category === 'non-tech' ? 'nontech' : category;
 
     if (!['poster', 'rulebook'].includes(fileType)) {
       return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
@@ -73,7 +76,7 @@ export async function POST(request) {
     const blobUrl = await uploadToBlob(
       buffer,
       uniqueFileName,
-      category,
+      normalizedCategory,
       eventName,
       fileType
     );
