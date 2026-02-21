@@ -21,6 +21,8 @@ export default withAuth(
       '/dashboard': ['super-admin', 'view-only'],
       '/events': ['super-admin', 'events-admin'],
       '/payments': ['super-admin', 'payments-admin'],
+      '/paper-presentations': ['super-admin', 'paper-presentation-admin'],
+      '/ideathon': ['super-admin', 'ideathon-admin'],
       '/users': ['super-admin'] // Only super admin can manage users
     };
 
@@ -33,7 +35,9 @@ export default withAuth(
             'super-admin': '/dashboard',
             'view-only': '/dashboard', 
             'events-admin': '/events',
-            'payments-admin': '/payments'
+            'payments-admin': '/payments',
+            'paper-presentation-admin': '/paper-presentations',
+            'ideathon-admin': '/ideathon'
           };
           
           return NextResponse.redirect(new URL(defaultRoutes[token.role] || '/dashboard', req.url));
@@ -55,6 +59,8 @@ export const config = {
     '/dashboard/:path*',
     '/events/:path*', 
     '/payments/:path*',
+    '/paper-presentations/:path*',
+    '/ideathon/:path*',
     '/users/:path*'
   ]
 };

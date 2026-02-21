@@ -11,6 +11,8 @@ import {
   IconSettings,
   IconLogout,
   IconInnerShadowTop,
+  IconPresentation,
+  IconBulb,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -43,7 +45,7 @@ export function AppSidebar({
     const baseItems = [];
     
     // Dashboard - accessible to all admin roles
-    if (['super-admin', 'view-only', 'events-admin', 'payments-admin'].includes(role)) {
+    if (['super-admin', 'view-only', 'events-admin', 'payments-admin', 'paper-presentation-admin', 'ideathon-admin'].includes(role)) {
       baseItems.push({
         title: "Dashboard",
         url: "/dashboard",
@@ -66,6 +68,24 @@ export function AppSidebar({
         title: "Payments",
         url: "/payments",
         icon: IconCreditCard,
+      });
+    }
+
+    // Paper Presentations - accessible to super-admin and paper-presentation-admin
+    if (['super-admin', 'paper-presentation-admin'].includes(role)) {
+      baseItems.push({
+        title: "Paper Presentations",
+        url: "/paper-presentations",
+        icon: IconPresentation,
+      });
+    }
+
+    // Ideathon - accessible to super-admin and ideathon-admin
+    if (['super-admin', 'ideathon-admin'].includes(role)) {
+      baseItems.push({
+        title: "Ideathon",
+        url: "/ideathon",
+        icon: IconBulb,
       });
     }
 

@@ -67,13 +67,11 @@ export default function EventsPage() {
     role: 'Coordinator'
   });
 
-  if (status === "loading") {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div>Loading...</div>
-      </div>
-    );
-  }
+  // File upload state
+  const [formFiles, setFormFiles] = useState({
+    poster: null,
+    rulebook: null
+  });
 
   const tagOptions = ["team", "individual", "coding", "puzzle", "experience", "reasoning", "ai", "business", "design", "other"];
 
@@ -97,6 +95,14 @@ export default function EventsPage() {
     fetchEvents();
   }, []);
 
+  if (status === "loading") {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div>Loading...</div>
+      </div>
+    );
+  }
+
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -115,6 +121,28 @@ export default function EventsPage() {
       const data = await response.json();
 
       if (data.success) {
+        // If we have files to upload and we're creating/updating an event
+        if ((formFiles.poster || formFiles.rulebook) && (data.event || editingEvent)) {
+          const eventId = editingEvent ? editingEvent._id : data.event._id;
+          const eventName = formData.eventName;
+          const category = formData.category;
+
+          const uploadResults = await uploadFormFiles(eventId, eventName, category);
+
+          // Update event with file URLs if any were uploaded
+          if (uploadResults.poster || uploadResults.rulebook) {
+            const updatePayload = { id: eventId };
+            if (uploadResults.poster) updatePayload.poster = uploadResults.poster;
+            if (uploadResults.rulebook) updatePayload.rulebook = uploadResults.rulebook;
+
+            await fetch('/api/events', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updatePayload)
+            });
+          }
+        }
+
         toast.success(editingEvent ? 'Event updated successfully' : 'Event created successfully');
         setIsEventSheetOpen(false);
         resetForm();
@@ -223,6 +251,7 @@ export default function EventsPage() {
     });
     setEditingEvent(null);
     setCoordinatorData({ name: '', email: '', phone: '', role: 'Coordinator' });
+    setFormFiles({ poster: null, rulebook: null });
   };
 
   // Handle edit
@@ -237,7 +266,7 @@ export default function EventsPage() {
     if (coordinatorData.name.trim()) {
       setFormData(prev => ({
         ...prev,
-        coordinators: [...prev.coordinators, coordinatorData]
+        coordinators: [...prev.coordinators, { ...coordinatorData }]
       }));
       setCoordinatorData({ name: '', email: '', phone: '', role: 'Coordinator' });
     }
@@ -249,6 +278,45 @@ export default function EventsPage() {
       ...prev,
       coordinators: prev.coordinators.filter((_, i) => i !== index)
     }));
+  };
+
+  // Handle file selection in form
+  const handleFormFileSelect = (fileType, file) => {
+    setFormFiles(prev => ({
+      ...prev,
+      [fileType]: file
+    }));
+  };
+
+  // Upload files for form submission
+  const uploadFormFiles = async (eventId, eventName, category) => {
+    const uploadResults = { poster: null, rulebook: null };
+
+    for (const [fileType, file] of Object.entries(formFiles)) {
+      if (file) {
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('eventName', eventName);
+          formData.append('category', category);
+          formData.append('fileType', fileType);
+
+          const response = await fetch('/api/events/upload', {
+            method: 'POST',
+            body: formData
+          });
+
+          const data = await response.json();
+          if (data.success) {
+            uploadResults[fileType] = data.url;
+          }
+        } catch (error) {
+          console.error(`Error uploading ${fileType}:`, error);
+        }
+      }
+    }
+
+    return uploadResults;
   };
 
   return (
@@ -274,58 +342,65 @@ export default function EventsPage() {
                   Create Event
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[600px] overflow-y-auto">
+              <SheetContent side="right" className="w-full sm:w-[800px] lg:w-[900px] xl:w-[1000px] overflow-y-auto">
                 <SheetHeader>
                   <SheetTitle>{editingEvent ? 'Edit Event' : 'Create New Event'}</SheetTitle>
                 </SheetHeader>
                 
-                <form onSubmit={handleSubmit} className="space-y-6 mt-6">
+                <form onSubmit={handleSubmit} className="space-y-8 mt-6">
                   <Tabs defaultValue="basic" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
+                    <TabsList className="grid w-full grid-cols-4">
                       <TabsTrigger value="basic">Basic Info</TabsTrigger>
                       <TabsTrigger value="details">Details</TabsTrigger>
+                      <TabsTrigger value="files">Files</TabsTrigger>
                       <TabsTrigger value="coordinators">Coordinators</TabsTrigger>
                     </TabsList>
                     
-                    <TabsContent value="basic" className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
+                    <TabsContent value="basic" className="space-y-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="space-y-2">
                           <Label htmlFor="uniqueName">Unique Name</Label>
                           <Input
                             id="uniqueName"
                             value={formData.uniqueName}
                             onChange={(e) => setFormData({...formData, uniqueName: e.target.value})}
                             required
+                            className="h-12"
+                            placeholder="e.g., hackathon-2024"
                           />
                         </div>
-                        <div>
+                        <div className="space-y-2">
                           <Label htmlFor="eventName">Event Name</Label>
                           <Input
                             id="eventName"
                             value={formData.eventName}
                             onChange={(e) => setFormData({...formData, eventName: e.target.value})}
                             required
+                            className="h-12"
+                            placeholder="e.g., AI Hackathon"
                           />
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="space-y-2">
                           <Label htmlFor="department">Department</Label>
                           <Input
                             id="department"
                             value={formData.department}
                             onChange={(e) => setFormData({...formData, department: e.target.value})}
                             required
+                            className="h-12"
+                            placeholder="e.g., Computer Science"
                           />
                         </div>
-                        <div>
+                        <div className="space-y-2">
                           <Label htmlFor="category">Category</Label>
                           <Select
                             value={formData.category}
                             onValueChange={(value) => setFormData({...formData, category: value})}
                           >
-                            <SelectTrigger>
+                            <SelectTrigger className="h-12">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -336,49 +411,85 @@ export default function EventsPage() {
                         </div>
                       </div>
 
-                      <div>
-                        <Label htmlFor="venue">Venue</Label>
-                        <Input
-                          id="venue"
-                          value={formData.venue}
-                          onChange={(e) => setFormData({...formData, venue: e.target.value})}
-                        />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <Label htmlFor="venue">Venue</Label>
+                          <Input
+                            id="venue"
+                            value={formData.venue}
+                            onChange={(e) => setFormData({...formData, venue: e.target.value})}
+                            className="h-12"
+                            placeholder="e.g., Main Auditorium"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="eventMode">Event Mode</Label>
+                          <Select
+                            value={formData.eventMode}
+                            onValueChange={(value) => setFormData({...formData, eventMode: value})}
+                          >
+                            <SelectTrigger className="h-12">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="offline">Offline</SelectItem>
+                              <SelectItem value="online">Online</SelectItem>
+                              <SelectItem value="hybrid">Hybrid</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
 
-                      <div>
-                        <Label htmlFor="eventDate">Event Date</Label>
+                      <div className="space-y-2">
+                        <Label htmlFor="eventDate">Event Date & Time</Label>
                         <Input
                           id="eventDate"
                           type="datetime-local"
                           value={formData.eventDate ? new Date(formData.eventDate).toISOString().slice(0, 16) : ''}
                           onChange={(e) => setFormData({...formData, eventDate: e.target.value})}
+                          className="h-12"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="eventTiming">Event Timing Description</Label>
+                        <Input
+                          id="eventTiming"
+                          value={formData.eventTiming}
+                          onChange={(e) => setFormData({...formData, eventTiming: e.target.value})}
+                          className="h-12"
+                          placeholder="e.g., 10:00 AM - 5:00 PM"
                         />
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="details" className="space-y-4">
-                      <div>
+                    <TabsContent value="details" className="space-y-6">
+                      <div className="space-y-2">
                         <Label htmlFor="eventAbstract">Abstract</Label>
                         <Textarea
                           id="eventAbstract"
                           value={formData.eventAbstract}
                           onChange={(e) => setFormData({...formData, eventAbstract: e.target.value})}
                           rows={4}
+                          className="resize-none"
+                          placeholder="Brief description of the event..."
                         />
                       </div>
 
-                      <div>
-                        <Label htmlFor="eventDesp">Description</Label>
+                      <div className="space-y-2">
+                        <Label htmlFor="eventDesp">Detailed Description</Label>
                         <Textarea
                           id="eventDesp"
                           value={formData.eventDesp}
                           onChange={(e) => setFormData({...formData, eventDesp: e.target.value})}
-                          rows={6}
+                          rows={12}
+                          className="resize-none min-h-[300px]"
+                          placeholder="Detailed event description, rules, requirements, judging criteria, timeline, and any other important information..."
                         />
                       </div>
 
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                        <div className="space-y-2">
                           <Label htmlFor="minTeamSize">Min Team Size</Label>
                           <Input
                             id="minTeamSize"
@@ -386,9 +497,10 @@ export default function EventsPage() {
                             min="1"
                             value={formData.minTeamSize}
                             onChange={(e) => setFormData({...formData, minTeamSize: parseInt(e.target.value)})}
+                            className="h-12"
                           />
                         </div>
-                        <div>
+                        <div className="space-y-2">
                           <Label htmlFor="maxTeamSize">Max Team Size</Label>
                           <Input
                             id="maxTeamSize"
@@ -396,90 +508,294 @@ export default function EventsPage() {
                             min="1"
                             value={formData.maxTeamSize}
                             onChange={(e) => setFormData({...formData, maxTeamSize: parseInt(e.target.value)})}
+                            className="h-12"
                           />
                         </div>
-                        <div>
-                          <Label htmlFor="registrationFee">Registration Fee</Label>
+                        <div className="space-y-2">
+                          <Label htmlFor="registrationFee">Registration Fee (₹)</Label>
                           <Input
                             id="registrationFee"
                             type="number"
                             min="0"
                             value={formData.registrationFee}
                             onChange={(e) => setFormData({...formData, registrationFee: parseInt(e.target.value)})}
+                            className="h-12"
                           />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <Label htmlFor="incharge">Event Incharge</Label>
+                          <Input
+                            id="incharge"
+                            value={formData.incharge}
+                            onChange={(e) => setFormData({...formData, incharge: e.target.value})}
+                            className="h-12"
+                            placeholder="Event head name"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="inchargeNumber">Incharge Phone Number</Label>
+                          <Input
+                            id="inchargeNumber"
+                            value={formData.inchargeNumber}
+                            onChange={(e) => setFormData({...formData, inchargeNumber: e.target.value})}
+                            className="h-12"
+                            placeholder="+91 9876543210"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <Label htmlFor="priority">Priority (for sorting)</Label>
+                          <Input
+                            id="priority"
+                            type="number"
+                            min="0"
+                            value={formData.priority}
+                            onChange={(e) => setFormData({...formData, priority: parseInt(e.target.value)})}
+                            className="h-12"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="flex items-center space-x-2 mt-8">
+                          <input
+                            type="checkbox"
+                            id="registrationRequired"
+                            checked={formData.registrationRequired}
+                            onChange={(e) => setFormData({...formData, registrationRequired: e.target.checked})}
+                            className="w-4 h-4"
+                          />
+                          <Label htmlFor="registrationRequired">Registration Required</Label>
                         </div>
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="coordinators" className="space-y-4">
-                      <div className="space-y-4 p-4 border rounded">
-                        <h4 className="font-medium">Add Coordinator</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="coordName">Name</Label>
+                    <TabsContent value="files" className="space-y-6">
+                      <div className="space-y-6">
+                        <div className="space-y-4 p-6 border rounded-lg bg-background border-border">
+                          <h4 className="font-semibold text-lg flex items-center gap-2">
+                            <Image className="w-5 h-5" />
+                            Event Poster Upload
+                          </h4>
+                          <div className="space-y-4">
+                            <div>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleFormFileSelect('poster', e.target.files[0])}
+                                className="hidden"
+                                id="form-poster-upload"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => document.getElementById('form-poster-upload').click()}
+                                className="w-full h-12"
+                              >
+                                <Upload className="w-4 h-4 mr-2" />
+                                {formFiles.poster ? `Selected: ${formFiles.poster.name}` : 'Choose Poster Image'}
+                              </Button>
+                            </div>
+                            {formFiles.poster && (
+                              <div className="p-4 bg-muted/50 rounded border border-border">
+                                <div className="text-sm text-muted-foreground">
+                                  <strong>File:</strong> {formFiles.poster.name}<br />
+                                  <strong>Size:</strong> {(formFiles.poster.size / 1024 / 1024).toFixed(2)} MB<br />
+                                  <strong>Type:</strong> {formFiles.poster.type}
+                                </div>
+                              </div>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 10MB
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4 p-6 border rounded-lg bg-background border-border">
+                          <h4 className="font-semibold text-lg flex items-center gap-2">
+                            <FileText className="w-5 h-5" />
+                            Rulebook Upload
+                          </h4>
+                          <div className="space-y-4">
+                            <div>
+                              <input
+                                type="file"
+                                accept=".pdf"
+                                onChange={(e) => handleFormFileSelect('rulebook', e.target.files[0])}
+                                className="hidden"
+                                id="form-rulebook-upload"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => document.getElementById('form-rulebook-upload').click()}
+                                className="w-full h-12"
+                              >
+                                <Upload className="w-4 h-4 mr-2" />
+                                {formFiles.rulebook ? `Selected: ${formFiles.rulebook.name}` : 'Choose Rulebook PDF'}
+                              </Button>
+                            </div>
+                            {formFiles.rulebook && (
+                              <div className="p-4 bg-muted/50 rounded border border-border">
+                                <div className="text-sm text-muted-foreground">
+                                  <strong>File:</strong> {formFiles.rulebook.name}<br />
+                                  <strong>Size:</strong> {(formFiles.rulebook.size / 1024 / 1024).toFixed(2)} MB<br />
+                                  <strong>Type:</strong> {formFiles.rulebook.type}
+                                </div>
+                              </div>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              Accepted format: PDF only. Maximum size: 10MB
+                            </p>
+                          </div>
+                        </div>
+
+                        {editingEvent && (
+                          <div className="space-y-4 p-6 border rounded-lg bg-background border-border">
+                            <h4 className="font-semibold text-lg">Current Files</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Current Poster:</Label>
+                                {editingEvent?.poster ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => window.open(editingEvent.poster, '_blank')}
+                                    className="w-full"
+                                  >
+                                    <Eye className="w-4 h-4 mr-2" />
+                                    View Current Poster
+                                  </Button>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">No poster uploaded</p>
+                                )}
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Current Rulebook:</Label>
+                                {editingEvent?.rulebook ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => window.open(editingEvent.rulebook, '_blank')}
+                                    className="w-full"
+                                  >
+                                    <FileText className="w-4 h-4 mr-2" />
+                                    View Current Rulebook
+                                  </Button>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">No rulebook uploaded</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="coordinators" className="space-y-6">
+                      <div className="space-y-6 p-6 border rounded-lg bg-background border-border">
+                        <h4 className="font-semibold text-lg">Add New Coordinator</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <Label htmlFor="coordName">Name *</Label>
                             <Input
                               id="coordName"
                               value={coordinatorData.name}
                               onChange={(e) => setCoordinatorData({...coordinatorData, name: e.target.value})}
+                              className="h-12"
+                              placeholder="Coordinator full name"
                             />
                           </div>
-                          <div>
+                          <div className="space-y-2">
                             <Label htmlFor="coordEmail">Email</Label>
                             <Input
                               id="coordEmail"
                               type="email"
                               value={coordinatorData.email}
                               onChange={(e) => setCoordinatorData({...coordinatorData, email: e.target.value})}
+                              className="h-12"
+                              placeholder="coordinator@example.com"
                             />
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="coordPhone">Phone</Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <Label htmlFor="coordPhone">Phone Number</Label>
                             <Input
                               id="coordPhone"
                               value={coordinatorData.phone}
                               onChange={(e) => setCoordinatorData({...coordinatorData, phone: e.target.value})}
+                              className="h-12"
+                              placeholder="+91 9876543210"
                             />
                           </div>
-                          <div>
-                            <Button type="button" onClick={addCoordinator} className="mt-6">
-                              Add Coordinator
-                            </Button>
+                          <div className="space-y-2">
+                            <Label htmlFor="coordRole">Role</Label>
+                            <Input
+                              id="coordRole"
+                              value={coordinatorData.role}
+                              onChange={(e) => setCoordinatorData({...coordinatorData, role: e.target.value})}
+                              className="h-12"
+                              placeholder="e.g., Student Coordinator"
+                            />
                           </div>
                         </div>
+                        <Button 
+                          type="button" 
+                          onClick={addCoordinator} 
+                          className="w-full sm:w-auto h-12 px-8"
+                          disabled={!coordinatorData.name.trim()}
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Coordinator
+                        </Button>
                       </div>
 
-                      <div className="space-y-2">
-                        <h4 className="font-medium">Current Coordinators</h4>
-                        {formData.coordinators.map((coordinator, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                            <div>
-                              <div className="font-medium">{coordinator.name}</div>
-                              <div className="text-sm text-gray-600">{coordinator.email} | {coordinator.phone}</div>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => removeCoordinator(index)}
-                            >
-                              Remove
-                            </Button>
+                      <div className="space-y-4">
+                        <h4 className="font-semibold text-lg">Current Coordinators ({formData.coordinators.length})</h4>
+                        {formData.coordinators.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-lg">
+                            No coordinators added yet. Add coordinators using the form above.
                           </div>
-                        ))}
+                        ) : (
+                          formData.coordinators.map((coordinator, index) => (
+                            <div key={index} className="flex items-start justify-between p-4 bg-background border rounded-lg shadow-sm border-border">
+                              <div className="flex-1">
+                                <div className="font-medium text-lg">{coordinator.name}</div>
+                                <div className="text-sm text-muted-foreground mt-1 space-y-1">
+                                  <div><strong>Role:</strong> {coordinator.role}</div>
+                                  {coordinator.email && <div><strong>Email:</strong> {coordinator.email}</div>}
+                                  {coordinator.phone && <div><strong>Phone:</strong> {coordinator.phone}</div>}
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => removeCoordinator(index)}
+                                className="ml-4 flex-shrink-0"
+                              >
+                                <Trash className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </TabsContent>
                   </Tabs>
 
-                  <div className="flex gap-4">
-                    <Button type="submit" className="flex-1">
+                  <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t">
+                    <Button type="submit" className="flex-1 h-12 text-lg font-medium">
                       {editingEvent ? 'Update Event' : 'Create Event'}
                     </Button>
                     <Button 
                       type="button" 
                       variant="outline" 
                       onClick={() => setIsEventSheetOpen(false)}
+                      className="flex-1 sm:flex-none h-12 px-8"
                     >
                       Cancel
                     </Button>

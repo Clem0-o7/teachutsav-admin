@@ -21,7 +21,7 @@ const AdminSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['super-admin', 'view-only', 'events-admin', 'payments-admin'],
+    enum: ['super-admin', 'view-only', 'events-admin', 'payments-admin', 'paper-presentation-admin', 'ideathon-admin'],
     required: true,
     default: 'view-only'
   },
@@ -108,6 +108,26 @@ AdminSchema.pre('save', async function() {
         manageEvents: false,
         manageAdmins: false,
         exportData: true,
+        systemSettings: false
+      }
+      break
+    case 'paper-presentation-admin':
+      this.permissions = {
+        viewAnalytics: false,
+        verifyPayments: false,
+        manageEvents: true,
+        manageAdmins: false,
+        exportData: false,
+        systemSettings: false
+      }
+      break
+    case 'ideathon-admin':
+      this.permissions = {
+        viewAnalytics: false,
+        verifyPayments: false,
+        manageEvents: true,
+        manageAdmins: false,
+        exportData: false,
         systemSettings: false
       }
       break
