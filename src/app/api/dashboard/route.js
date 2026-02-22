@@ -37,9 +37,10 @@ export async function GET() {
       u.passes.some(p => p.status === "pending")
     ).length;
 
-    // --- Chart Data: registrations & payments per day ---
+    // --- Chart Data: registrations, payments & verified payments per day ---
     const regByDate = {};
     const payByDate = {};
+    const verByDate = {};
 
     for (const user of users) {
       const regDate = new Date(user.createdAt).toISOString().slice(0, 10);
@@ -49,19 +50,25 @@ export async function GET() {
         for (const pass of user.passes) {
           const payDate = new Date(pass.submittedDate).toISOString().slice(0, 10);
           payByDate[payDate] = (payByDate[payDate] || 0) + 1;
+
+          if (pass.status === "verified" && pass.verifiedDate) {
+            const verDate = new Date(pass.verifiedDate).toISOString().slice(0, 10);
+            verByDate[verDate] = (verByDate[verDate] || 0) + 1;
+          }
         }
       }
     }
 
     // Merge all dates into a sorted array
     const allDates = Array.from(
-      new Set([...Object.keys(regByDate), ...Object.keys(payByDate)])
+      new Set([...Object.keys(regByDate), ...Object.keys(payByDate), ...Object.keys(verByDate)])
     ).sort();
 
     const chartData = allDates.map(date => ({
       date,
       registrations: regByDate[date] || 0,
       payments: payByDate[date] || 0,
+      verified: verByDate[date] || 0,
     }));
 
     // --- Pass Breakdown: count of verified passes per pass type ---
