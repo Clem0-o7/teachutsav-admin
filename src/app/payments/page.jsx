@@ -148,7 +148,11 @@ export default function PaymentsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success("Payment verified — confirmation email sent");
+        if (data.emailWarning) {
+          toast.warning(`Payment verified, but email failed: ${data.emailWarning}`);
+        } else {
+          toast.success("Payment verified — confirmation email sent");
+        }
         setVerifyDialog({ open: false, payment: null });
         fetchPayments();
       } else toast.error(data.message || "Verification failed");
@@ -167,7 +171,11 @@ export default function PaymentsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success("Payment rejected — rejection email sent");
+        if (data.emailWarning) {
+          toast.warning(`Payment rejected, but email failed: ${data.emailWarning}`);
+        } else {
+          toast.success("Payment rejected — rejection email sent");
+        }
         setRejectDialog({ open: false, payment: null });
         setRejectionReason("");
         fetchPayments();

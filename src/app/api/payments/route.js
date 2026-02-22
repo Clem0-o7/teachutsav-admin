@@ -96,26 +96,36 @@ export async function PATCH(request) {
 
     await user.save();
 
-    // Send email (non-blocking — don't fail the response if email fails)
+    // Send email — awaited so errors are caught and surfaced as a warning
+    let emailWarning = null;
     const emailPayload = {
       userName: user.name,
       userEmail: user.email,
       passType: pass.passType,
     };
 
-    if (action === "verify") {
-      const nextActions = {
-        1: "We look forward to your participation in the events at TechUtsav!",
-        2: "We look forward to your participation and presentations at TechUtsav!",
-        3: "We look forward to your participation, presentations and submissions at TechUtsav!",
-        4: "We look forward to your full participation and all submissions at TechUtsav!",
-      };
-      sendPaymentVerifiedEmail({ ...emailPayload, nextAction: nextActions[pass.passType] }).catch(console.error);
-    } else {
-      sendPaymentRejectedEmail({ ...emailPayload, rejectionReason: rejectionReason.trim() }).catch(console.error);
+    try {
+      if (action === "verify") {
+        const nextActions = {
+          1: "We look forward to your participation in the events at TechUtsav!",
+          2: "We look forward to your participation and presentations at TechUtsav!",
+          3: "We look forward to your participation, presentations and submissions at TechUtsav!",
+          4: "We look forward to your full participation and all submissions at TechUtsav!",
+        };
+        await sendPaymentVerifiedEmail({ ...emailPayload, nextAction: nextActions[pass.passType] });
+      } else {
+        await sendPaymentRejectedEmail({ ...emailPayload, rejectionReason: rejectionReason.trim() });
+      }
+    } catch (emailErr) {
+      console.error("Email send failed:", emailErr);
+      emailWarning = `Status updated but email failed to send: ${emailErr.message}`;
     }
 
-    return NextResponse.json({ success: true, message: action === "verify" ? "Payment verified" : "Payment rejected" });
+    return NextResponse.json({
+      success: true,
+      message: action === "verify" ? "Payment verified" : "Payment rejected",
+      ...(emailWarning && { emailWarning }),
+    });
   } catch (error) {
     console.error("Payments PATCH error:", error);
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
