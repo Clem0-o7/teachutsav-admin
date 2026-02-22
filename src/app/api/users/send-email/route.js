@@ -44,7 +44,7 @@ export async function POST(request) {
     }
 
     const APP_URL = process.env.APP_URL || "https://techutsavtce.tech";
-    const REGISTER_URL = `${APP_URL}/register`;
+    const REGISTER_URL = `${APP_URL}/signup`;
 
     const results = [];
 
