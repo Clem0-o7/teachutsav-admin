@@ -51,6 +51,7 @@ import {
   CreditCard,
   Clock,
   AlertTriangle,
+  Download,
 } from "lucide-react";
 
 const PASS_LABELS = {
@@ -85,11 +86,15 @@ export default function PaymentsPage() {
   const [search, setSearch]       = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterPass, setFilterPass]     = useState("all");
+  const [filterPaymentType, setFilterPaymentType] = useState("all");
+  const [filterDuplicates, setFilterDuplicates] = useState("all");
   const [sortBy, setSortBy]             = useState("newest");
 
   const [screenshotDialog, setScreenshotDialog] = useState({ open: false, payment: null });
   const [verifyDialog, setVerifyDialog]         = useState({ open: false, payment: null });
   const [verifyLoading, setVerifyLoading]       = useState(false);
+  const [verifyPaymentIdType, setVerifyPaymentIdType] = useState("");
+  const [editedTransactionId, setEditedTransactionId] = useState("");
   const [rejectDialog, setRejectDialog]         = useState({ open: false, payment: null });
   const [rejectionReason, setRejectionReason]   = useState("");
   const [rejectLoading, setRejectLoading]       = useState(false);
@@ -111,6 +116,14 @@ export default function PaymentsPage() {
     let list = [...payments];
     if (filterStatus !== "all") list = list.filter(p => p.status === filterStatus);
     if (filterPass  !== "all") list = list.filter(p => String(p.passType) === filterPass);
+    if (filterPaymentType !== "all") list = list.filter(p => p.paymentIdType === filterPaymentType);
+    if (filterDuplicates !== "all") {
+      if (filterDuplicates === "duplicates") {
+        list = list.filter(p => p.isDuplicate);
+      } else if (filterDuplicates === "unique") {
+        list = list.filter(p => !p.isDuplicate);
+      }
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(p =>
@@ -128,23 +141,45 @@ export default function PaymentsPage() {
       case "pass":      list.sort((a,b) => a.passType - b.passType); break;
     }
     return list;
-  }, [payments, filterStatus, filterPass, search, sortBy]);
+  }, [payments, filterStatus, filterPass, filterPaymentType, filterDuplicates, search, sortBy]);
 
   const stats = useMemo(() => ({
     total:    payments.length,
     pending:  payments.filter(p => p.status === "pending").length,
     verified: payments.filter(p => p.status === "verified").length,
     rejected: payments.filter(p => p.status === "rejected").length,
+    duplicates: payments.filter(p => p.isDuplicate).length,
   }), [payments]);
 
   const handleVerify = async () => {
-    if (!verifyDialog.payment) return;
+    if (!verifyDialog.payment || !verifyPaymentIdType) {
+      toast.error("Please select a payment ID type");
+      return;
+    }
+
+    const finalTransactionId = editedTransactionId.trim() || verifyDialog.payment.transactionNumber;
+
+    // Check for special characters in final transaction ID
+    const hasSpecialChars = /[^a-zA-Z0-9]/.test(finalTransactionId);
+    if (hasSpecialChars) {
+      const confirmed = window.confirm(
+        `Warning: Transaction ID "${finalTransactionId}" contains special characters. This may affect duplicate detection. Continue with verification?`
+      );
+      if (!confirmed) return;
+    }
+
     setVerifyLoading(true);
     try {
       const res  = await fetch("/api/payments", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: verifyDialog.payment.userId, passId: verifyDialog.payment.passId, action: "verify" }),
+        body: JSON.stringify({ 
+          userId: verifyDialog.payment.userId, 
+          passId: verifyDialog.payment.passId, 
+          action: "verify",
+          paymentIdType: verifyPaymentIdType,
+          editedTransactionId: finalTransactionId !== verifyDialog.payment.transactionNumber ? finalTransactionId : undefined
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -154,6 +189,8 @@ export default function PaymentsPage() {
           toast.success("Payment verified — confirmation email sent");
         }
         setVerifyDialog({ open: false, payment: null });
+        setVerifyPaymentIdType("");
+        setEditedTransactionId("");
         fetchPayments();
       } else toast.error(data.message || "Verification failed");
     } catch { toast.error("Verification failed"); }
@@ -184,6 +221,56 @@ export default function PaymentsPage() {
     finally  { setRejectLoading(false); }
   };
 
+  // Download functionality using API endpoint
+  const [downloadLoading, setDownloadLoading] = useState({});
+
+  const downloadVerifiedPassPayments = async (passType) => {
+    const verifiedPayments = payments.filter(p => 
+      p.status === 'verified' && 
+      p.passType === passType
+    );
+    
+    if (verifiedPayments.length === 0) {
+      toast.info(`No verified payments found for ${PASS_LABELS[passType]}`);
+      return;
+    }
+
+    setDownloadLoading(prev => ({ ...prev, [`pass${passType}`]: true }));
+
+    try {
+      const response = await fetch(`/api/payments/download?passType=${passType}`);
+      
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Get filename from response header or create default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filename = contentDisposition 
+        ? contentDisposition.split('filename="')[1]?.split('"')[0]
+        : `${PASS_LABELS[passType].replace(/[^a-zA-Z0-9]/g, '_')}_Verified_Payments.csv`;
+      
+      link.download = filename;
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.success(`Downloaded ${verifiedPayments.length} verified payments for ${PASS_LABELS[passType]}`);
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error(`Failed to download ${PASS_LABELS[passType]} payments`);
+    } finally {
+      setDownloadLoading(prev => ({ ...prev, [`pass${passType}`]: false }));
+    }
+  };
+
   if (status === "loading") {
     return <div className="flex items-center justify-center min-h-screen text-muted-foreground">Loading...</div>;
   }
@@ -208,12 +295,13 @@ export default function PaymentsPage() {
           </div>
 
           {/* Stat chips */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {[
-              { label: "Total",    value: stats.total,    icon: CreditCard,  cls: "text-foreground" },
-              { label: "Pending",  value: stats.pending,  icon: Clock,       cls: "text-yellow-600" },
-              { label: "Verified", value: stats.verified, icon: CheckCircle, cls: "text-green-600" },
-              { label: "Rejected", value: stats.rejected, icon: XCircle,     cls: "text-red-600" },
+              { label: "Total",    value: stats.total,    icon: CreditCard,     cls: "text-foreground" },
+              { label: "Pending",  value: stats.pending,  icon: Clock,          cls: "text-yellow-600" },
+              { label: "Verified", value: stats.verified, icon: CheckCircle,    cls: "text-green-600" },
+              { label: "Rejected", value: stats.rejected, icon: XCircle,        cls: "text-red-600" },
+              { label: "Duplicates", value: stats.duplicates, icon: AlertTriangle, cls: "text-orange-600" },
             ].map(({ label, value, icon: Icon, cls }) => (
               <Card key={label} className="shadow-none">
                 <CardContent className="flex items-center gap-3 p-4">
@@ -253,6 +341,22 @@ export default function PaymentsPage() {
                     <SelectItem value="4">Pass 4 – Online Workshops</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select value={filterPaymentType} onValueChange={setFilterPaymentType}>
+                  <SelectTrigger className="w-40 h-9"><SelectValue placeholder="Payment ID Type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="upi">UPI Transaction ID</SelectItem>
+                    <SelectItem value="eazypay">Eazy Pay Reference</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterDuplicates} onValueChange={setFilterDuplicates}>
+                  <SelectTrigger className="w-40 h-9"><SelectValue placeholder="Duplicates" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Payments</SelectItem>
+                    <SelectItem value="unique">Unique Only</SelectItem>
+                    <SelectItem value="duplicates">Duplicates Only</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Select value={sortBy} onValueChange={setSortBy}>
                   <SelectTrigger className="w-40 h-9"><SelectValue placeholder="Sort by" /></SelectTrigger>
                   <SelectContent>
@@ -268,6 +372,42 @@ export default function PaymentsPage() {
             </CardContent>
           </Card>
 
+          {/* Download Verified Payments */}
+          <Card className="shadow-none">
+            <CardContent className="p-4">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <Download className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="text-sm font-medium">Download Verified Payments</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  {Object.entries(PASS_LABELS).map(([passType, label]) => {
+                    const verifiedCount = payments.filter(p => p.status === 'verified' && p.passType === parseInt(passType)).length;
+                    const isLoading = downloadLoading[`pass${passType}`];
+                    return (
+                      <Button
+                        key={passType}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => downloadVerifiedPassPayments(parseInt(passType))}
+                        disabled={verifiedCount === 0 || isLoading}
+                        className="gap-2 text-xs h-9 px-3"
+                      >
+                        <Download className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
+                        <div className="flex flex-col items-start leading-none">
+                          <span className="font-medium">{label}</span>
+                          <span className="text-muted-foreground">
+                            {isLoading ? 'Downloading...' : `(${verifiedCount} verified)`}
+                          </span>
+                        </div>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Table */}
           <Card className="shadow-none overflow-hidden">
             <Table>
@@ -275,6 +415,7 @@ export default function PaymentsPage() {
                 <TableRow>
                   <TableHead>Participant</TableHead>
                   <TableHead>Pass</TableHead>
+                  <TableHead>Payment ID Type</TableHead>
                   <TableHead>Transaction No.</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Submitted</TableHead>
@@ -285,17 +426,17 @@ export default function PaymentsPage() {
               <TableBody>
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
-                    <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
+                    <TableRow key={i}>{Array.from({ length: 8 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
                   ))
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-16 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
                       <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-30" />
                       No payments found
                     </TableCell>
                   </TableRow>
                 ) : filtered.map(payment => (
-                  <TableRow key={payment.passId}>
+                  <TableRow key={payment.passId} className={payment.isDuplicate ? "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800" : ""}>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -309,7 +450,38 @@ export default function PaymentsPage() {
                       </div>
                     </TableCell>
                     <TableCell><span className="text-sm font-medium">{PASS_LABELS[payment.passType]}</span></TableCell>
-                    <TableCell><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{payment.transactionNumber}</code></TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        {payment.paymentIdType ? (
+                          <Badge variant="outline" className="text-xs">
+                            {payment.paymentIdType === "upi" ? "UPI" : "Eazy Pay"}
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">
+                            Not Set
+                          </Badge>
+                        )}
+                        {payment.isDuplicate && (
+                          <Badge variant="destructive" className="text-xs">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            Duplicate
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{payment.transactionNumber}</code>
+                        {payment.hasSpecialCharacters && (
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              Special chars
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div className="space-y-1">
                         <StatusBadge status={payment.status} />
@@ -342,7 +514,10 @@ export default function PaymentsPage() {
                           </Button>
                         )}
                         {payment.status !== "rejected" && (
-                          <Button size="sm" variant="outline" className="h-8 px-2 gap-1 text-xs text-red-700 border-red-300 hover:bg-red-50" onClick={() => { setRejectDialog({ open: true, payment }); setRejectionReason(""); }}>
+                          <Button size="sm" variant="outline" className="h-8 px-2 gap-1 text-xs text-red-700 border-red-300 hover:bg-red-50" onClick={() => { 
+                            setRejectDialog({ open: true, payment }); 
+                            setRejectionReason(payment.isDuplicate ? "Duplicate transaction ID detected. This transaction number has already been used by another participant." : "");
+                          }}>
                             <XCircle className="w-3.5 h-3.5" /> Reject
                           </Button>
                         )}
@@ -363,10 +538,32 @@ export default function PaymentsPage() {
             <DialogTitle>Payment Proof</DialogTitle>
             <DialogDescription>
               {screenshotDialog.payment && (
-                <span><strong>{screenshotDialog.payment.userName}</strong> · {PASS_LABELS[screenshotDialog.payment.passType]} · Txn: <code>{screenshotDialog.payment.transactionNumber}</code></span>
+                <span>
+                  <strong>{screenshotDialog.payment.userName}</strong> · {PASS_LABELS[screenshotDialog.payment.passType]} · 
+                  {screenshotDialog.payment.paymentIdType ? 
+                    (screenshotDialog.payment.paymentIdType === "upi" ? " UPI ID" : " Eazy Pay Reference") : 
+                    " Payment Type: Not Set"
+                  }: <code>{screenshotDialog.payment.transactionNumber}</code>
+                </span>
               )}
             </DialogDescription>
           </DialogHeader>
+          {screenshotDialog.payment && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {screenshotDialog.payment.isDuplicate && (
+                <Badge variant="destructive" className="text-xs">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  Duplicate Transaction ID
+                </Badge>
+              )}
+              {screenshotDialog.payment.hasSpecialCharacters && (
+                <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  Special Characters
+                </Badge>
+              )}
+            </div>
+          )}
           {screenshotDialog.payment?.screenshotUrl ? (
             <div className="space-y-3">
               <div className="rounded-lg overflow-hidden border bg-muted flex items-center justify-center min-h-[300px] max-h-[60vh]">
@@ -388,7 +585,11 @@ export default function PaymentsPage() {
               </Button>
             )}
             {screenshotDialog.payment?.status !== "rejected" && (
-              <Button variant="outline" className="text-red-700 border-red-300 hover:bg-red-50" onClick={() => { setRejectDialog({ open: true, payment: screenshotDialog.payment }); setRejectionReason(""); setScreenshotDialog({ open: false, payment: null }); }}>
+              <Button variant="outline" className="text-red-700 border-red-300 hover:bg-red-50" onClick={() => { 
+                setRejectDialog({ open: true, payment: screenshotDialog.payment }); 
+                setRejectionReason(screenshotDialog.payment.isDuplicate ? "Duplicate transaction ID detected. This transaction number has already been used by another participant." : ""); 
+                setScreenshotDialog({ open: false, payment: null }); 
+              }}>
                 <XCircle className="w-4 h-4 mr-2" /> Reject This Payment
               </Button>
             )}
@@ -398,23 +599,86 @@ export default function PaymentsPage() {
       </Dialog>
 
       {/* ── Verify Confirm Dialog ────────────────────────────────────────── */}
-      <Dialog open={verifyDialog.open} onOpenChange={open => !open && setVerifyDialog({ open: false, payment: null })}>
+      <Dialog open={verifyDialog.open} onOpenChange={open => {
+        if (!open) {
+          setVerifyDialog({ open: false, payment: null });
+          setVerifyPaymentIdType("");
+        }
+      }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><CheckCircle className="w-5 h-5 text-green-600" /> Confirm Verification</DialogTitle>
-            <DialogDescription>This marks the payment verified and sends a confirmation email to the participant.</DialogDescription>
+            <DialogDescription>Set the payment ID type and verify this payment. A confirmation email will be sent to the participant.</DialogDescription>
           </DialogHeader>
           {verifyDialog.payment && (
-            <div className="rounded-lg border p-4 bg-muted/30 space-y-2 text-sm">
-              {[["Participant", verifyDialog.payment.userName], ["Email", verifyDialog.payment.userEmail], ["Pass", PASS_LABELS[verifyDialog.payment.passType]], ["Transaction", verifyDialog.payment.transactionNumber]].map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-4"><span className="text-muted-foreground shrink-0">{k}</span><span className="font-medium text-right">{v}</span></div>
-              ))}
+            <div className="space-y-4">
+              <div className="rounded-lg border p-4 bg-muted/30 space-y-2 text-sm">
+                {[
+                  ["Participant", verifyDialog.payment.userName], 
+                  ["Email", verifyDialog.payment.userEmail], 
+                  ["Pass", PASS_LABELS[verifyDialog.payment.passType]], 
+                  ["Transaction ID", verifyDialog.payment.transactionNumber]
+                ].map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-4">
+                    <span className="text-muted-foreground shrink-0">{k}</span>
+                    <span className="font-medium text-right">{v}</span>
+                  </div>
+                ))}
+                {verifyDialog.payment.isDuplicate && (
+                  <div className="flex items-center gap-2 p-2 bg-orange-100 dark:bg-orange-950/50 rounded border border-orange-200 dark:border-orange-800">
+                    <AlertTriangle className="w-4 h-4 text-orange-600" />
+                    <span className="text-xs text-orange-800 dark:text-orange-200">Warning: This transaction ID is used by multiple payments</span>
+                  </div>
+                )}
+                {verifyDialog.payment.hasSpecialCharacters && (
+                  <div className="flex items-center gap-2 p-2 bg-amber-100 dark:bg-amber-950/50 rounded border border-amber-200 dark:border-amber-800">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    <span className="text-xs text-amber-800 dark:text-amber-200">Notice: Transaction ID contains special characters</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="payment-id-type">Payment ID Type <span className="text-red-500">*</span></Label>
+                <Select value={verifyPaymentIdType} onValueChange={setVerifyPaymentIdType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select payment ID type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="upi">UPI Transaction ID</SelectItem>
+                    <SelectItem value="eazypay">EazyPay Transaction ID</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Choose based on the payment method shown in the proof.</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-transaction-id">Edit Transaction ID (Optional)</Label>
+                <Input
+                  id="edit-transaction-id"
+                  value={editedTransactionId}
+                  onChange={(e) => setEditedTransactionId(e.target.value)}
+                  placeholder={verifyDialog.payment?.transactionNumber || ""}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to keep original: <code className="text-xs">{verifyDialog.payment?.transactionNumber}</code>
+                </p>
+              </div>
             </div>
           )}
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setVerifyDialog({ open: false, payment: null })} disabled={verifyLoading}>Cancel</Button>
-            <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleVerify} disabled={verifyLoading}>
-              <CheckCircle className="w-4 h-4 mr-2" />{verifyLoading ? "Verifying…" : "Yes, Verify & Send Email"}
+            <Button variant="ghost" onClick={() => {
+              setVerifyDialog({ open: false, payment: null });
+              setVerifyPaymentIdType("");
+              setEditedTransactionId("");
+            }} disabled={verifyLoading}>Cancel</Button>
+            <Button 
+              className="bg-green-600 hover:bg-green-700 text-white" 
+              onClick={handleVerify} 
+              disabled={verifyLoading || !verifyPaymentIdType}
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              {verifyLoading ? "Verifying…" : "Verify & Send Email"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -428,10 +692,36 @@ export default function PaymentsPage() {
             <DialogDescription>Provide a reason — it will be included in the email sent to the participant.</DialogDescription>
           </DialogHeader>
           {rejectDialog.payment && (
-            <div className="rounded-lg border p-4 bg-muted/30 space-y-2 text-sm">
-              {[["Participant", rejectDialog.payment.userName], ["Pass", PASS_LABELS[rejectDialog.payment.passType]], ["Transaction", rejectDialog.payment.transactionNumber]].map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-4"><span className="text-muted-foreground shrink-0">{k}</span><span className="font-medium text-right">{v}</span></div>
-              ))}
+            <div className="space-y-3">
+              <div className="rounded-lg border p-4 bg-muted/30 space-y-2 text-sm">
+                {[
+                  ["Participant", rejectDialog.payment.userName], 
+                  ["Pass", PASS_LABELS[rejectDialog.payment.passType]], 
+                  ["Payment Type", rejectDialog.payment.paymentIdType ? (rejectDialog.payment.paymentIdType === "upi" ? "UPI Transaction ID" : "Eazy Pay Reference") : "Not Set"],
+                  ["Transaction ID", rejectDialog.payment.transactionNumber]
+                ].map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-4">
+                    <span className="text-muted-foreground shrink-0">{k}</span>
+                    <span className="font-medium text-right">{v}</span>
+                  </div>
+                ))}
+                {(rejectDialog.payment.isDuplicate || rejectDialog.payment.hasSpecialCharacters) && (
+                  <div className="space-y-2">
+                    {rejectDialog.payment.isDuplicate && (
+                      <div className="flex items-center gap-2 p-2 bg-orange-100 dark:bg-orange-950/50 rounded border border-orange-200 dark:border-orange-800">
+                        <AlertTriangle className="w-4 h-4 text-orange-600" />
+                        <span className="text-xs text-orange-800 dark:text-orange-200">This transaction ID is already used by other payments</span>
+                      </div>
+                    )}
+                    {rejectDialog.payment.hasSpecialCharacters && (
+                      <div className="flex items-center gap-2 p-2 bg-amber-100 dark:bg-amber-950/50 rounded border border-amber-200 dark:border-amber-800">
+                        <AlertTriangle className="w-4 h-4 text-amber-600" />
+                        <span className="text-xs text-amber-800 dark:text-amber-200">Transaction ID contains special characters</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
           <div className="space-y-2">

@@ -5,6 +5,19 @@ import dbConnect from "@/lib/dbConnect";
 import User from "@/lib/models/User";
 import { sendPaymentVerifiedEmail, sendPaymentRejectedEmail } from "@/lib/email";
 
+// Utility functions for transaction ID processing
+function normalizeTransactionId(transactionId) {
+  if (!transactionId) return "";
+  // Remove all special characters and convert to lowercase
+  return transactionId.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+}
+
+function hasSpecialCharacters(transactionId) {
+  if (!transactionId) return false;
+  // Check if string contains any non-alphanumeric characters
+  return /[^a-zA-Z0-9]/.test(transactionId);
+}
+
 // GET /api/payments — list all users who have passes, with flat pass records
 export async function GET() {
   try {
@@ -20,8 +33,25 @@ export async function GET() {
 
     // Flatten: one record per pass submission
     const payments = [];
+    const normalizedTransactionCounts = {}; // Track normalized transaction number occurrences
+    
+    // First pass: collect all normalized transaction numbers
     for (const user of users) {
       for (const pass of user.passes) {
+        const normalizedTxn = normalizeTransactionId(pass.transactionNumber);
+        if (normalizedTxn) {
+          normalizedTransactionCounts[normalizedTxn] = (normalizedTransactionCounts[normalizedTxn] || 0) + 1;
+        }
+      }
+    }
+    
+    // Second pass: build payments array with duplicate detection
+    for (const user of users) {
+      for (const pass of user.passes) {
+        const normalizedTxn = normalizeTransactionId(pass.transactionNumber);
+        const isDuplicate = normalizedTxn && normalizedTransactionCounts[normalizedTxn] > 1;
+        const hasSpecialChars = hasSpecialCharacters(pass.transactionNumber);
+        
         payments.push({
           userId: user._id.toString(),
           passId: pass._id.toString(),
@@ -32,9 +62,12 @@ export async function GET() {
           year: user.year || "",
           phoneNo: user.phoneNo || "",
           passType: pass.passType,
+          paymentIdType: pass.paymentIdType || null,
           transactionNumber: pass.transactionNumber,
           screenshotUrl: pass.transactionScreenshot,
           status: pass.status,
+          isDuplicate: isDuplicate,
+          hasSpecialCharacters: hasSpecialChars,
           rejectionReason: pass.rejectionReason || "",
           submittedDate: pass.submittedDate,
           verifiedDate: pass.verifiedDate || null,
@@ -57,7 +90,7 @@ export async function PATCH(request) {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
 
-    const { userId, passId, action, rejectionReason } = await request.json();
+    const { userId, passId, action, rejectionReason, paymentIdType, editedTransactionId } = await request.json();
 
     if (!userId || !passId || !action) {
       return NextResponse.json({ success: false, message: "Missing required fields" }, { status: 400 });
@@ -67,6 +100,9 @@ export async function PATCH(request) {
     }
     if (action === "reject" && !rejectionReason?.trim()) {
       return NextResponse.json({ success: false, message: "Rejection reason is required" }, { status: 400 });
+    }
+    if (action === "verify" && (!paymentIdType || !["upi", "eazypay"].includes(paymentIdType))) {
+      return NextResponse.json({ success: false, message: "Valid payment ID type is required for verification" }, { status: 400 });
     }
 
     await dbConnect();
@@ -82,6 +118,11 @@ export async function PATCH(request) {
 
     if (action === "verify") {
       pass.status = "verified";
+      pass.paymentIdType = paymentIdType; // Set by admin during verification
+      // Update transaction ID if edited by admin
+      if (editedTransactionId && editedTransactionId.trim() !== pass.transactionNumber) {
+        pass.transactionNumber = editedTransactionId.trim();
+      }
       pass.verifiedDate = new Date();
       pass.verifiedBy = adminName;
       pass.verifiedByEmail = adminEmail;

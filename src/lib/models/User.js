@@ -32,8 +32,14 @@ const userSchema = new Schema(
           required: true,
           enum: [1, 2, 3, 4], // Pass 1-4
         },
+        paymentIdType: {
+          type: String,
+          required: false, // Set by admin during verification
+          enum: ["upi", "eazypay"], // UPI Transaction ID or Eazy Pay Reference Number
+        },
         transactionNumber: { type: String, required: true },
         transactionScreenshot: { type: String, required: true }, // Azure Blob URL
+        isDuplicate: { type: Boolean, default: false }, // Flag for duplicate transaction numbers
         status: {
           type: String,
           enum: ["pending", "verified", "rejected"],
