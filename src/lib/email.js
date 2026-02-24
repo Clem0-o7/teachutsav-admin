@@ -1,36 +1,47 @@
 import nodemailer from "nodemailer";
 
 /**
- * Get configured email transporter
+ * Get configured email transporter (ZeptoMail SMTP)
+ * @returns {nodemailer.Transporter}
  */
 function getEmailTransporter() {
-  const port = Number(process.env.EMAIL_SERVER_PORT);
-  const isSecure = port === 465;
-
-  const config = {
-    host: process.env.EMAIL_SERVER_HOST,
-    port,
-    secure: isSecure,
-    auth: {
-      user: process.env.EMAIL_SERVER_USER,
-      pass: process.env.EMAIL_SERVER_PASSWORD,
-    },
+  // Validate required environment variables
+  const requiredEnvVars = {
+    ZEPTOMAIL_API_KEY: process.env.ZEPTOMAIL_API_KEY,
+    EMAIL_FROM: process.env.EMAIL_FROM,
   };
 
-  if (!isSecure) {
-    config.requireTLS = true;
-    config.tls = { ciphers: "SSLv3", rejectUnauthorized: false };
+  const missingVars = Object.entries(requiredEnvVars)
+    .filter(([_, value]) => !value)
+    .map(([key]) => key);
+
+  if (missingVars.length > 0) {
+    throw new Error(`Missing required environment variables: ${missingVars.join(", ")}`);
   }
+
+  // ZeptoMail SMTP configuration (port 587 / TLS)
+  const config = {
+    host: "smtp.zeptomail.in",
+    port: 587,
+    secure: false, // TLS on port 587
+    auth: {
+      user: "emailapikey", // Fixed literal username required by ZeptoMail SMTP
+      pass: process.env.ZEPTOMAIL_API_KEY,
+    },
+    requireTLS: true,
+    tls: {
+      rejectUnauthorized: false,
+    },
+  };
 
   return nodemailer.createTransport(config);
 }
 
 function getFromAddress() {
-  const emailFrom = process.env.EMAIL_FROM?.replace(/['"]/g, "").trim();
-  const emailUser = process.env.EMAIL_SERVER_USER;
+  const emailFrom = process.env.EMAIL_FROM?.trim();
   if (emailFrom?.includes("@")) return emailFrom;
-  if (emailFrom) return `"${emailFrom}" <${emailUser}>`;
-  return emailUser;
+  if (emailFrom) return `"${emailFrom}" <noreply@techutsavtce.tech>`;
+  return "noreply@techutsavtce.tech";
 }
 
 // ─── Shared layout wrapper ─────────────────────────────────────────────────
