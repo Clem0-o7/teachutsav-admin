@@ -99,6 +99,9 @@ export default function PaymentsPage() {
   const [rejectionReason, setRejectionReason]   = useState("");
   const [rejectLoading, setRejectLoading]       = useState(false);
 
+  const [duplicateCheckResult, setDuplicateCheckResult] = useState(null);
+  const [duplicateCheckLoading, setDuplicateCheckLoading] = useState(false);
+
   const fetchPayments = async () => {
     setLoading(true);
     try {
@@ -269,6 +272,29 @@ export default function PaymentsPage() {
     } finally {
       setDownloadLoading(prev => ({ ...prev, [`pass${passType}`]: false }));
     }
+  };
+
+  const checkTransactionDuplicate = async () => {
+    setDuplicateCheckLoading(true);
+    setDuplicateCheckResult(null);
+    const transactionId = editedTransactionId.trim() || verifyDialog.payment?.transactionNumber;
+    if (!transactionId) {
+      setDuplicateCheckResult({ error: "Enter a transaction ID first." });
+      setDuplicateCheckLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/payments/check-transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionId })
+      });
+      const data = await res.json();
+      setDuplicateCheckResult(data.exists ? { exists: true } : { exists: false });
+    } catch (e) {
+      setDuplicateCheckResult({ error: "Error checking for duplicates." });
+    }
+    setDuplicateCheckLoading(false);
   };
 
   if (status === "loading") {
@@ -664,6 +690,21 @@ export default function PaymentsPage() {
                   Leave empty to keep original: <code className="text-xs">{verifyDialog.payment?.transactionNumber}</code>
                 </p>
               </div>
+
+              <div className="flex gap-2 items-center mt-2">
+                <Button type="button" size="sm" variant="outline" onClick={checkTransactionDuplicate} disabled={duplicateCheckLoading}>
+                  {duplicateCheckLoading ? "Checking..." : "Check for duplicates"}
+                </Button>
+                {duplicateCheckResult && duplicateCheckResult.exists && (
+                  <span className="text-xs text-red-600 font-semibold">Duplicate transaction ID found!</span>
+                )}
+                {duplicateCheckResult && duplicateCheckResult.exists === false && (
+                  <span className="text-xs text-green-600 font-semibold">No duplicate found.</span>
+                )}
+                {duplicateCheckResult && duplicateCheckResult.error && (
+                  <span className="text-xs text-orange-600 font-semibold">{duplicateCheckResult.error}</span>
+                )}
+              </div>
             </div>
           )}
           <DialogFooter className="gap-2">
@@ -671,6 +712,7 @@ export default function PaymentsPage() {
               setVerifyDialog({ open: false, payment: null });
               setVerifyPaymentIdType("");
               setEditedTransactionId("");
+              setDuplicateCheckResult(null);
             }} disabled={verifyLoading}>Cancel</Button>
             <Button 
               className="bg-green-600 hover:bg-green-700 text-white" 
