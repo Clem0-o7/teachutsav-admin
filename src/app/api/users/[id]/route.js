@@ -29,7 +29,7 @@ export async function GET(request, { params }) {
 }
 
 // PATCH /api/users/[id] — update user details
-export async function PATCH(request, { params }) {
+export async function PATCH(request, context) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -40,6 +40,7 @@ export async function PATCH(request, { params }) {
 
     await dbConnect();
     const body = await request.json();
+    const params = await context.params;
 
     // Whitelist of editable fields
     const allowed = ["name", "email", "college", "phoneNo", "year", "department", "onboardingCompleted", "isEmailVerified"];
@@ -51,14 +52,14 @@ export async function PATCH(request, { params }) {
     const user = await User.findByIdAndUpdate(
       params.id,
       { $set: update },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     ).select("-password -emailVerificationToken -emailVerificationExpires").lean();
 
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
     return NextResponse.json({ user });
   } catch (err) {
     console.error("PATCH /api/users/[id] error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
