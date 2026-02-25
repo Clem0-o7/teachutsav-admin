@@ -629,6 +629,8 @@ export default function PaymentsPage() {
         if (!open) {
           setVerifyDialog({ open: false, payment: null });
           setVerifyPaymentIdType("");
+          setEditedTransactionId("");
+          setDuplicateCheckResult(null);
         }
       }}>
         <DialogContent className="max-w-md">
