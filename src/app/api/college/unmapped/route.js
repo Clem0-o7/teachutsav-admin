@@ -18,32 +18,64 @@ export async function GET() {
   }
 
   await dbConnect();
-  // Group users where collegeId is null/missing, by college string
+
+  // Group users where collegeId is null/missing, by normalized college string (trim + lowercase).
+  // Also returns per-variant counts for UI display.
   const pipeline = [
     {
       $match: {
-        $or: [
-          { collegeId: { $exists: false } },
-          { collegeId: null },
-        ],
+        $or: [{ collegeId: { $exists: false } }, { collegeId: null }],
         college: { $exists: true, $ne: "" },
       },
     },
     {
+      $project: {
+        rawCollege: "$college",
+        cleaned: { $trim: { input: "$college" } },
+        normalized: { $toLower: { $trim: { input: "$college" } } },
+      },
+    },
+    {
+      $match: {
+        cleaned: { $ne: "" },
+      },
+    },
+    // (normalized, cleaned) -> count (variant counts)
+    {
       $group: {
-        _id: "$college",
-        userIds: { $addToSet: "$_id" },
+        _id: { normalized: "$normalized", display: "$cleaned" },
         count: { $sum: 1 },
+      },
+    },
+    // normalized -> variants + total
+    {
+      $group: {
+        _id: "$_id.normalized",
+        variants: {
+          $push: {
+            name: "$_id.display",
+            count: "$count",
+          },
+        },
+        totalUsers: { $sum: "$count" },
       },
     },
     { $sort: { _id: 1 } },
   ];
+
   const groups = await User.aggregate(pipeline);
-  // Format response
-  const colleges = groups.map(g => ({
-    college: g._id,
-    userIds: g.userIds,
-    count: g.count,
-  }));
+
+  const colleges = groups.map((g) => {
+    const variants = [...(g.variants || [])].sort((a, b) => b.count - a.count);
+    const displayName = variants[0]?.name || g._id;
+
+    return {
+      normalizedKey: g._id,
+      displayName,
+      totalUsers: g.totalUsers,
+      variants,
+    };
+  });
+
   return NextResponse.json({ success: true, colleges });
 }

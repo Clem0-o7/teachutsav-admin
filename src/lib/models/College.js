@@ -6,7 +6,8 @@ const collegeSchema = new Schema(
     name: { type: String, required: true, unique: true },
     city: String,
     state: String,
-    addedByUser: { type: Boolean, default: false },
+    // Email of the user/admin who created this college (for auditability)
+    addedByUser: { type: String, default: null },
     approved: { type: Boolean, default: true },
   },
   { timestamps: true }

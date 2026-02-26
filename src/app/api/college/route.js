@@ -5,6 +5,7 @@ import College from "@/lib/models/College";
 import User from "@/lib/models/User";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
+import CollegeMergeLog from "@/lib/models/CollegeMergeLog";
 
 // Helper: Check if user is super-admin
 async function isSuperAdmin() {
@@ -28,7 +29,6 @@ export async function POST(req) {
     return NextResponse.json({ success: false, error: "Unauthorized: Super-admin only" }, { status: 403 });
   }
 
-  const session = await getServerSession(authOptions);
   const schema = z.object({
     name: z.string().min(1, "College name is required").trim(),
     city: z.string().optional(),
@@ -39,6 +39,8 @@ export async function POST(req) {
   try {
     body = await req.json();
     const validated = schema.parse(body);
+
+    const session = await getServerSession(authOptions);
 
     await dbConnect();
 
@@ -55,7 +57,7 @@ export async function POST(req) {
       name: validated.name,
       city: validated.city || "",
       state: validated.state || "",
-      addedByUser: session.user.email,
+      addedByUser: session?.user?.email ?? null,
       approved: false,
     });
 
@@ -85,10 +87,17 @@ export async function PATCH(req) {
     return NextResponse.json({ success: false, error: "Unauthorized: Super-admin only" }, { status: 403 });
   }
 
+  // Backward compatible:
+  // - New: { collegeId, normalizedKeys[] } (preferred)
+  // - Old: { collegeId, userIds[] }
   const schema = z.object({
     collegeId: z.string().min(1, "collegeId is required"),
-    userIds: z.array(z.string().min(1)).min(1, "At least one userIds is required"),
-  });
+    normalizedKeys: z.array(z.string().min(1)).optional(),
+    userIds: z.array(z.string().min(1)).optional(),
+  }).refine(
+    (v) => (Array.isArray(v.normalizedKeys) && v.normalizedKeys.length > 0) || (Array.isArray(v.userIds) && v.userIds.length > 0),
+    { message: "Provide either normalizedKeys or userIds" }
+  );
 
   let body;
   try {
@@ -98,20 +107,75 @@ export async function PATCH(req) {
     await dbConnect();
 
     // Verify collegeId exists
-    const collegeExists = await College.findById(validated.collegeId);
-    if (!collegeExists) {
+    const college = await College.findById(validated.collegeId).lean();
+    if (!college) {
       return NextResponse.json(
         { success: false, error: "College not found" },
         { status: 404 }
       );
     }
 
-    // Parse userIds as ObjectIds and bulk update
-    const { userIds, collegeId } = validated;
-    const result = await User.updateMany(
-      { _id: { $in: userIds } },
-      { $set: { collegeId } }
-    );
+    const { collegeId } = validated;
+
+    let result;
+    let logNormalizedKeys = [];
+
+    if (validated.normalizedKeys?.length) {
+      const keys = validated.normalizedKeys
+        .map((k) => k.trim().toLowerCase())
+        .filter(Boolean);
+
+      if (!keys.length) {
+        return NextResponse.json(
+          { success: false, error: "No valid normalizedKeys provided" },
+          { status: 400 }
+        );
+      }
+
+      logNormalizedKeys = keys;
+
+      // Single bulk update:
+      // - Only users with collegeId null/missing
+      // - Only users whose normalized college string matches keys
+      result = await User.updateMany(
+        {
+          $or: [{ collegeId: { $exists: false } }, { collegeId: null }],
+          college: { $exists: true, $ne: "" },
+          $expr: {
+            $in: [
+              {
+                $toLower: {
+                  $trim: { input: "$college" },
+                },
+              },
+              keys,
+            ],
+          },
+        },
+        {
+          $set: {
+            collegeId,
+            college: college.name,
+          },
+        }
+      );
+    } else {
+      // Legacy path: bulk update by explicit userIds
+      const userIds = (validated.userIds || []).filter(Boolean);
+      result = await User.updateMany(
+        { _id: { $in: userIds } },
+        { $set: { collegeId, college: college.name } }
+      );
+    }
+
+    const session = await getServerSession(authOptions);
+    await CollegeMergeLog.create({
+      collegeId,
+      collegeName: college.name,
+      normalizedKeys: logNormalizedKeys,
+      modifiedCount: result.modifiedCount,
+      performedByEmail: session?.user?.email ?? null,
+    });
 
     return NextResponse.json({
       success: true,
