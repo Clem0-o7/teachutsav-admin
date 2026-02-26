@@ -17,6 +17,7 @@ const ROLE_ACCESS = {
   "/paper-presentations":["super-admin", "paper-presentation-admin"],
   "/ideathon":           ["super-admin", "ideathon-admin"],
   "/users":              ["super-admin"],
+  "/colleges":           ["super-admin"],
 };
 
 export async function middleware(req) {
@@ -75,5 +76,6 @@ export const config = {
     "/paper-presentations/:path*",
     "/ideathon/:path*",
     "/users/:path*",
+    "/colleges/:path*",
   ],
 };

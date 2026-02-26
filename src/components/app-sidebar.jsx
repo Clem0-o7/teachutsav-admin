@@ -1,3 +1,5 @@
+//app-sidebar.jsx
+
 "use client"
 
 import * as React from "react"
@@ -12,6 +14,7 @@ import {
   IconInnerShadowTop,
   IconPresentation,
   IconBulb,
+  IconBuildingCommunity,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -94,6 +97,15 @@ export function AppSidebar({
         title: "Users",
         url: "/users",
         icon: IconUsers,
+      });
+    }
+
+    // Colleges - only accessible to super-admin
+    if (role === 'super-admin') {
+      baseItems.push({
+        title: "Colleges",
+        url: "/colleges",
+        icon: IconBuildingCommunity,
       });
     }
 

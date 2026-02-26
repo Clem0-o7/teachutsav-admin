@@ -379,3 +379,146 @@ export async function sendPaymentReminderEmail({ userName, userEmail, registerLi
     text: `Hi ${userName}, you haven't completed your TechUtsav registration yet. Register now for priority access, priority queue during check-in, and priority seating. Register here: ${registerLink}`,
   });
 }
+
+// Ideathon Acceptance Email
+
+export async function sendIdeathonAcceptedEmail({ teamName, leaderName, leaderEmail, eventName }) {
+  const body = `
+    <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:22px;font-weight:700;">🎉 Congratulations!</h2>
+    <p style="margin:0 0 24px;color:#495057;font-size:15px;line-height:1.7;">
+      Hi <strong>${leaderName}</strong>,
+    </p>
+    <p style="margin:0 0 16px;color:#495057;font-size:15px;line-height:1.7;">
+      We are excited to inform you that your team <strong>${teamName}</strong> has been <span style="color:#20c997;font-weight:600;">accepted</span> for the <strong>${eventName}</strong> Ideathon at TechUtsav!
+    </p>
+    <p style="margin:0 0 16px;color:#495057;font-size:15px;line-height:1.7;">
+      Please check your dashboard for further instructions and next steps.
+    </p>
+    <p style="margin:0;color:#868e96;font-size:14px;">Best wishes,<br /><strong style="color:#1a1a1a;">TechUtsav Team</strong></p>
+  `;
+  const html = emailWrapper(
+    "linear-gradient(135deg, #20c997 0%, #0ca678 100%)",
+    "🎉",
+    "Ideathon Submission Accepted",
+    body
+  );
+  const transporter = getEmailTransporter();
+  return transporter.sendMail({
+    from: getFromAddress(),
+    to: leaderEmail,
+    subject: `🎉 Ideathon Submission Accepted | TechUtsav`,
+    html,
+    text: `Hi ${leaderName}, your team ${teamName} has been accepted for the ${eventName} Ideathon at TechUtsav!`,
+  });
+}
+
+//Ideathon Rejection Email
+export async function sendIdeathonRejectedEmail({ teamName, leaderName, leaderEmail, eventName, rejectionReason }) {
+  const body = `
+    <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:22px;font-weight:700;">Submission Update</h2>
+    <p style="margin:0 0 24px;color:#495057;font-size:15px;line-height:1.7;">
+      Hi <strong>${leaderName}</strong>,
+    </p>
+    <p style="margin:0 0 16px;color:#495057;font-size:15px;line-height:1.7;">
+      We regret to inform you that your team <strong>${teamName}</strong>'s submission for the <strong>${eventName}</strong> Ideathon was <span style="color:#ff6b6b;font-weight:600;">not selected</span>.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff3cd;border-left:4px solid #ffc107;border-radius:0 8px 8px 0;margin-bottom:24px;">
+      <tr>
+        <td style="padding:16px 20px;">
+          <p style="margin:0 0 4px;color:#856404;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Reason</p>
+          <p style="margin:0;color:#664d03;font-size:14px;line-height:1.6;">${rejectionReason}</p>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 8px;color:#495057;font-size:14px;line-height:1.7;">
+      Thank you for your interest and effort. We encourage you to participate in other events at TechUtsav!
+    </p>
+    <p style="margin:0;color:#868e96;font-size:14px;">Regards,<br /><strong style="color:#1a1a1a;">TechUtsav Team</strong></p>
+  `;
+  const html = emailWrapper(
+    "linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)",
+    "❌",
+    "Ideathon Submission Not Selected",
+    body
+  );
+  const transporter = getEmailTransporter();
+  return transporter.sendMail({
+    from: getFromAddress(),
+    to: leaderEmail,
+    subject: `❌ Ideathon Submission Not Selected | TechUtsav`,
+    html,
+    text: `Hi ${leaderName}, your team ${teamName}'s submission for the ${eventName} Ideathon was not selected. Reason: ${rejectionReason}`,
+  });
+}
+
+// ─── Paper Presentation Accepted Email ────────────────────────────────────
+
+export async function sendPaperAcceptedEmail({ authorName, authorEmail, title }) {
+  const body = `
+    <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:22px;font-weight:700;">🎉 Paper Accepted!</h2>
+    <p style="margin:0 0 24px;color:#495057;font-size:15px;line-height:1.7;">
+      Hi <strong>${authorName}</strong>,
+    </p>
+    <p style="margin:0 0 16px;color:#495057;font-size:15px;line-height:1.7;">
+      We are pleased to inform you that your paper presentation <strong>"${title}"</strong> has been <span style="color:#20c997;font-weight:600;">accepted</span> for TechUtsav!
+    </p>
+    <p style="margin:0 0 16px;color:#495057;font-size:15px;line-height:1.7;">
+      Please check your dashboard for presentation schedule, venue details, and further instructions.
+    </p>
+    <p style="margin:0;color:#868e96;font-size:14px;">Congratulations,<br /><strong style="color:#1a1a1a;">TechUtsav Team</strong></p>
+  `;
+  const html = emailWrapper(
+    "linear-gradient(135deg, #20c997 0%, #0ca678 100%)",
+    "🎉",
+    "Paper Presentation Accepted",
+    body
+  );
+  const transporter = getEmailTransporter();
+  return transporter.sendMail({
+    from: getFromAddress(),
+    to: authorEmail,
+    subject: `🎉 Paper Presentation Accepted | TechUtsav`,
+    html,
+    text: `Hi ${authorName}, your paper presentation '${title}' has been accepted for TechUtsav!`,
+  });
+}
+
+// ─── Paper Presentation Rejected Email ────────────────────────────────────
+
+export async function sendPaperRejectedEmail({ authorName, authorEmail, title, rejectionReason }) {
+  const body = `
+    <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:22px;font-weight:700;">Submission Update</h2>
+    <p style="margin:0 0 24px;color:#495057;font-size:15px;line-height:1.7;">
+      Hi <strong>${authorName}</strong>,
+    </p>
+    <p style="margin:0 0 16px;color:#495057;font-size:15px;line-height:1.7;">
+      We regret to inform you that your paper presentation <strong>"${title}"</strong> was <span style="color:#ff6b6b;font-weight:600;">not accepted</span> for TechUtsav.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff3cd;border-left:4px solid #ffc107;border-radius:0 8px 8px 0;margin-bottom:24px;">
+      <tr>
+        <td style="padding:16px 20px;">
+          <p style="margin:0 0 4px;color:#856404;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Reviewer Comments</p>
+          <p style="margin:0;color:#664d03;font-size:14px;line-height:1.6;">${rejectionReason}</p>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 8px;color:#495057;font-size:14px;line-height:1.7;">
+      We appreciate your submission and encourage you to participate in other events at TechUtsav or resubmit in future years with improvements.
+    </p>
+    <p style="margin:0;color:#868e96;font-size:14px;">Best regards,<br /><strong style="color:#1a1a1a;">TechUtsav Team</strong></p>
+  `;
+  const html = emailWrapper(
+    "linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)",
+    "❌",
+    "Paper Presentation Not Accepted",
+    body
+  );
+  const transporter = getEmailTransporter();
+  return transporter.sendMail({
+    from: getFromAddress(),
+    to: authorEmail,
+    subject: `Paper Presentation Not Accepted | TechUtsav`,
+    html,
+    text: `Hi ${authorName}, your paper presentation '${title}' was not accepted for TechUtsav. Reason: ${rejectionReason}`,
+  });
+}
