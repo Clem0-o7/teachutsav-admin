@@ -31,14 +31,44 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { MapPin, Users } from "lucide-react";
+import { MapPin, Users, Download, BarChart3 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  LabelList,
+} from "recharts";
 
 /* ---------------- Utilities ---------------- */
 
 function groupByFirstLetter(items, keyFn) {
   const grouped = {};
   items.forEach(item => {
-    const letter = keyFn(item).charAt(0).toUpperCase();
+    const key = keyFn(item) || "";
+    if (!key) return;
+    const letter = key.charAt(0).toUpperCase();
     if (!grouped[letter]) grouped[letter] = [];
     grouped[letter].push(item);
   });
@@ -50,6 +80,30 @@ function groupByFirstLetter(items, keyFn) {
     }, {});
 }
 
+function csvEscape(value) {
+  const str = value == null ? "" : String(value);
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function slugifyForFilename(value) {
+  if (!value) return "college";
+  return value
+    .toString()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "college";
+}
+
+const collegeChartConfig = {
+  count: {
+    label: "Users",
+    color: "var(--primary)",
+  },
+};
+
 /* ---------------- Page ---------------- */
 
 export default function CollegesPage() {
@@ -58,6 +112,7 @@ export default function CollegesPage() {
 
   const [colleges, setColleges] = useState([]);
   const [unmapped, setUnmapped] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -72,6 +127,11 @@ export default function CollegesPage() {
   const [createState, setCreateState] = useState("");
   const [savingCollege, setSavingCollege] = useState(false);
   const [assigning, setAssigning] = useState(false);
+
+  // Analytics state
+  const [passFilter, setPassFilter] = useState("all");
+  const [groupCountInput, setGroupCountInput] = useState("");
+  const [splitGroups, setSplitGroups] = useState([]);
 
   /* ---------------- Auth Guard ---------------- */
 
@@ -91,16 +151,19 @@ export default function CollegesPage() {
 
     const fetchData = async () => {
       try {
-        const [c, u] = await Promise.all([
+        const [c, u, usersRes] = await Promise.all([
           fetch("/api/college"),
           fetch("/api/college/unmapped"),
+          fetch("/api/users?sortBy=nameAsc"),
         ]);
 
         const collegesData = await c.json();
         const unmappedData = await u.json();
+        const usersData = await usersRes.json();
 
         setColleges(collegesData.colleges || []);
         setUnmapped(unmappedData.colleges || []);
+        setUsers(usersData.users || []);
       } catch {
         toast.error("Failed to load college data");
       } finally {
@@ -133,6 +196,69 @@ export default function CollegesPage() {
     [unmapped]
   );
 
+  const analyticsUsers = useMemo(() => {
+    if (passFilter === "all") return users;
+    const pt = parseInt(passFilter, 10);
+    if (!pt || !Array.isArray(users)) return users;
+
+    return users.filter((u) =>
+      Array.isArray(u.passes) &&
+      u.passes.some(
+        (p) => p && p.passType === pt && p.status === "verified"
+      )
+    );
+  }, [users, passFilter]);
+
+  const collegeStats = useMemo(() => {
+    if (!Array.isArray(analyticsUsers) || analyticsUsers.length === 0) {
+      return [];
+    }
+
+    const byId = new Map(colleges.map((c) => [String(c._id), c]));
+    const map = new Map();
+
+    analyticsUsers.forEach((user) => {
+      const id = user.collegeId ? String(user.collegeId) : null;
+      const rawName = (user.college || "").trim();
+      const normalized = rawName.toLowerCase();
+      const key = id || (normalized || "unknown");
+
+      let entry = map.get(key);
+      if (!entry) {
+        const collegeDoc = id ? byId.get(id) : null;
+        const name =
+          (collegeDoc && collegeDoc.name) ||
+          rawName ||
+          "Unknown / Unmapped";
+
+        entry = {
+          key,
+          collegeId: id,
+          name,
+          users: [],
+          count: 0,
+        };
+        map.set(key, entry);
+      }
+
+      entry.users.push(user);
+      entry.count += 1;
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "")
+    );
+  }, [analyticsUsers, colleges]);
+
+  const collegeChartData = useMemo(
+    () =>
+      collegeStats.map((c) => ({
+        name: c.name,
+        count: c.count,
+      })),
+    [collegeStats]
+  );
+
   const selectedGroupsMeta = useMemo(() => {
     const keys = new Set(selectedCollegeGroups);
     const groups = unmapped.filter(g => keys.has(g.normalizedKey));
@@ -157,6 +283,74 @@ export default function CollegesPage() {
   const openAssignForSingleGroup = (normalizedKey) => {
     setSelectedCollegeGroups(new Set([normalizedKey]));
     setDialogOpen(true);
+  };
+
+  const downloadCollegeCsv = (entry) => {
+    if (!entry) return;
+    const lines = [];
+    lines.push(`College: ${entry.name || ""}`);
+    lines.push("");
+    lines.push("Name,Department,Year,Modification (If any),Signature");
+
+    const sortedUsers = [...(entry.users || [])].sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "")
+    );
+
+    sortedUsers.forEach((u) => {
+      const row = [
+        csvEscape(u.name || ""),
+        csvEscape(u.department || ""),
+        csvEscape(
+          typeof u.year === "number" || typeof u.year === "string"
+            ? String(u.year)
+            : ""
+        ),
+        "",
+        "",
+      ];
+      lines.push(row.join(","));
+    });
+
+    const csv = lines.join("\r\n");
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${slugifyForFilename(entry.name)}-attendance.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleSplitColleges = () => {
+    const x = parseInt(groupCountInput, 10);
+    if (!x || x <= 0) {
+      toast.error("Enter a valid number of groups");
+      return;
+    }
+    if (!collegeStats.length) {
+      toast.error("No colleges available to split");
+      return;
+    }
+
+    const sorted = [...collegeStats].sort((a, b) => b.count - a.count);
+    const groups = Array.from({ length: x }, (_, i) => ({
+      id: i + 1,
+      colleges: [],
+      total: 0,
+    }));
+
+    sorted.forEach((college) => {
+      // Assign each college to the group with the smallest total so far
+      groups.sort((a, b) => a.total - b.total);
+      groups[0].colleges.push(college);
+      groups[0].total += college.count;
+    });
+
+    setSplitGroups(groups);
   };
 
   const createCollege = async () => {
@@ -290,7 +484,7 @@ export default function CollegesPage() {
             <div>
               <h1 className="text-3xl font-bold">Colleges</h1>
               <p className="text-muted-foreground">
-                Normalize user-entered colleges into canonical records
+                Normalize user-entered colleges into canonical records and view college-wise analytics
               </p>
             </div>
             <Button onClick={() => setDialogOpen(true)}>
@@ -299,7 +493,7 @@ export default function CollegesPage() {
             </Button>
           </div>
 
-          {/* Panels */}
+          {/* Normalization Panels */}
           <div className="grid gap-6">
 
             {/* Canonical Colleges */}
@@ -475,6 +669,210 @@ export default function CollegesPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Analytics Controls */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Download className="w-4 h-4" />
+                  College-wise CSV
+                </CardTitle>
+                <CardDescription>
+                  Download print-friendly attendance sheets per college. Optionally filter by pass type first.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Pass filter (optional)
+                    </p>
+                    <Select
+                      value={passFilter}
+                      onValueChange={setPassFilter}
+                    >
+                      <SelectTrigger className="w-40 h-9">
+                        <SelectValue placeholder="All passes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All passes</SelectItem>
+                        <SelectItem value="1">Pass 1</SelectItem>
+                        <SelectItem value="2">Pass 2</SelectItem>
+                        <SelectItem value="3">Pass 3</SelectItem>
+                        <SelectItem value="4">Pass 4</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        disabled={loading || collegeStats.length === 0}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Download CSV
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-72">
+                      <DropdownMenuLabel>Per-college CSV</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {collegeStats.length === 0 ? (
+                        <DropdownMenuItem disabled>
+                          No colleges available
+                        </DropdownMenuItem>
+                      ) : (
+                        collegeStats.map((entry) => (
+                          <DropdownMenuItem
+                            key={entry.key}
+                            onClick={() => downloadCollegeCsv(entry)}
+                          >
+                            <span className="truncate flex-1">{entry.name}</span>
+                            <span className="text-xs text-muted-foreground ml-2">
+                              {entry.count} user{entry.count === 1 ? "" : "s"}
+                            </span>
+                          </DropdownMenuItem>
+                        ))
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  CSV format: row 1 &ldquo;College: &lt;name&gt;&rdquo;, row 3 onwards:{" "}
+                  <span className="font-mono">
+                    Name | Department | Year | Modification (If any) | Signature
+                  </span>
+                  .
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Split Colleges Into Groups</CardTitle>
+                <CardDescription>
+                  Balance college-wise counts into groups for manual verification or room allocation.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="Number of groups (X)"
+                    className="sm:max-w-[200px]"
+                    value={groupCountInput}
+                    onChange={(e) => setGroupCountInput(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleSplitColleges}
+                    disabled={loading || collegeStats.length === 0}
+                  >
+                    Split Into Groups
+                  </Button>
+                </div>
+
+                {splitGroups.length > 0 && (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {splitGroups.map((group) => (
+                      <div
+                        key={group.id}
+                        className="rounded-md border border-border p-3 space-y-1"
+                      >
+                        <p className="text-sm font-semibold">
+                          Group {group.id}
+                        </p>
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Total: {group.total} user{group.total === 1 ? "" : "s"}
+                        </p>
+                        {group.colleges.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            No colleges assigned.
+                          </p>
+                        ) : (
+                          <ul className="space-y-0.5 text-xs">
+                            {group.colleges.map((c) => (
+                              <li key={c.key}>
+                                {c.name}{" "}
+                                <span className="text-muted-foreground">
+                                  ({c.count})
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Distribution Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" />
+                College-wise Distribution
+              </CardTitle>
+              <CardDescription>
+                Horizontal bar chart of user counts per college. Respects the selected pass filter.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {collegeChartData.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No users found for the current filters.
+                </p>
+              ) : (
+                <ChartContainer
+                  config={collegeChartConfig}
+                  className="aspect-auto w-full"
+                  style={{
+                    height: Math.max(240, collegeChartData.length * 28),
+                  }}
+                >
+                  <BarChart
+                    accessibilityLayer
+                    data={collegeChartData}
+                    layout="vertical"
+                  >
+                    <CartesianGrid vertical={false} />
+                    <XAxis
+                      type="number"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={4}
+                    />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      tickLine={false}
+                      axisLine={false}
+                      width={160}
+                      tickMargin={4}
+                    />
+                    <ChartTooltip
+                      content={<ChartTooltipContent indicator="dot" />}
+                    />
+                    <Bar dataKey="count" fill="var(--color-count)">
+                      
+                      <LabelList
+                        dataKey="count"
+                        position="right"
+                        className="fill-foreground text-[11px]"
+                      />
+                    </Bar>
+                  </BarChart>
+                </ChartContainer>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Assign / Merge dialog */}
