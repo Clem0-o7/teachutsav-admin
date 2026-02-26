@@ -140,6 +140,14 @@ export default function CollegesPage() {
     return { groups, totalUsers };
   }, [selectedCollegeGroups, unmapped]);
 
+  const createMatches = useMemo(() => {
+    const q = createName.trim().toLowerCase();
+    if (!q) return [];
+    return colleges
+      .filter(c => (c.name || "").toLowerCase().includes(q))
+      .slice(0, 5);
+  }, [createName, colleges]);
+
   const toggleGroupSelected = (normalizedKey) => {
     const next = new Set(selectedCollegeGroups);
     next.has(normalizedKey) ? next.delete(normalizedKey) : next.add(normalizedKey);
@@ -155,6 +163,20 @@ export default function CollegesPage() {
     const name = createName.trim();
     if (!name) {
       toast.error("College name is required");
+      return;
+    }
+
+    // If there is an existing canonical college with the exact same name
+    // (case-insensitive), prefer selecting that instead of creating a variant.
+    const existingExact = colleges.find(
+      c => (c.name || "").trim().toLowerCase() === name.toLowerCase()
+    );
+    if (existingExact) {
+      setSelectedCollege(existingExact);
+      setCreateName("");
+      setCreateCity("");
+      setCreateState("");
+      toast.success("Using existing canonical college");
       return;
     }
 
@@ -503,6 +525,9 @@ export default function CollegesPage() {
 
                 <div className="rounded-md border border-border p-3 space-y-2">
                   <p className="text-sm font-medium">Create new college</p>
+                  <p className="text-xs text-muted-foreground">
+                    Start typing to see matching existing colleges and avoid creating duplicates.
+                  </p>
                   <Input
                     placeholder="Name *"
                     value={createName}
@@ -520,6 +545,37 @@ export default function CollegesPage() {
                       onChange={e => setCreateState(e.target.value)}
                     />
                   </div>
+                  {createMatches.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-muted-foreground">
+                        Matching existing colleges
+                      </p>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {createMatches.map(c => (
+                          <button
+                            key={c._id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCollege(c);
+                              setCreateName("");
+                              setCreateCity("");
+                              setCreateState("");
+                              toast.success("Selected existing canonical college");
+                            }}
+                            className="w-full text-left text-xs px-2 py-1 rounded hover:bg-muted border border-transparent hover:border-border transition"
+                          >
+                            <span className="font-medium">{c.name}</span>
+                            {c.city || c.state ? (
+                              <span className="text-muted-foreground">
+                                {" "}
+                                — {c.city}{c.city && c.state ? ", " : ""}{c.state}
+                              </span>
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <Button
                     type="button"
                     variant="secondary"
