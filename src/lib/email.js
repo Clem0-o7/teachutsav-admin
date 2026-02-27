@@ -413,7 +413,7 @@ export async function sendIdeathonAcceptedEmail({ teamName, leaderName, leaderEm
       </p>
 
       <a
-        href="https://chat.whatsapp.com/HASE3xQDSF5FRCHmj3ykWG?mode=hq2tcla"
+        href="https://chat.whatsapp.com/GQpoZ93GCtIGfHpVJtcMQ7"
         target="_blank"
         style="
           display:inline-block;
