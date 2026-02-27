@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import QRCode from "qrcode";
 
 /**
  * Get configured email transporter (ZeptoMail SMTP)
@@ -620,5 +621,119 @@ export async function sendPaperRejectedEmail({ authorName, authorEmail, title, r
     subject: `Paper Presentation Not Accepted | TechUtsav`,
     html,
     text: `Hi ${authorName}, your paper presentation '${title}' was not accepted for TechUtsav. Reason: ${rejectionReason}`,
+  });
+}
+
+
+//QR Sending mail for walkin
+
+
+
+export async function sendOnspotPassEmail({ userName, userEmail, passType, userId }) {
+  const PASS_LABELS = {
+    1: "Pass 1 – Offline Workshop And Events",
+    2: "Pass 2 – Paper Presentation",
+    3: "Pass 3 – Ideathon",
+    4: "Pass 4 – Online Workshops",
+  };
+  const passLabel = PASS_LABELS[passType] ?? `Pass ${passType}`;
+
+  // Generate QR code as base64 data URL — encodes the plain MongoDB ObjectId
+  const qrDataUrl = await QRCode.toDataURL(userId, {
+    width: 220,
+    margin: 2,
+    color: { dark: "#1a1a1a", light: "#ffffff" },
+  });
+  // Strip the "data:image/png;base64," prefix to get raw base64 for nodemailer CID embed
+  const qrBase64 = qrDataUrl.replace(/^data:image\/png;base64,/, "");
+
+  const body = `
+    <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:22px;font-weight:700;">🎉 You're Registered!</h2>
+    <p style="margin:0 0 24px;color:#495057;font-size:15px;line-height:1.7;">
+      Hi <strong>${userName}</strong>,
+    </p>
+
+    <!-- Pass Box -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#d4edda,#c3e6cb);border-radius:10px;margin-bottom:24px;">
+      <tr>
+        <td style="padding:20px 24px;">
+          <p style="margin:0 0 6px;color:#155724;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">✅ On-spot Registration</p>
+          <p style="margin:0;color:#155724;font-size:20px;font-weight:700;">${passLabel}</p>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:0 0 20px;color:#495057;font-size:15px;line-height:1.7;">
+      You have been successfully registered on-spot for <strong>TechUtsav "PARADIGM" '26</strong>.
+      Present the QR code below at the venue entrance for gate verification.
+    </p>
+
+    <!-- QR Code -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr>
+        <td align="center">
+          <table cellpadding="0" cellspacing="0" style="background:#ffffff;border:2px solid #dee2e6;border-radius:12px;display:inline-block;">
+            <tr>
+              <td style="padding:20px;">
+                <img
+                  src="cid:qrcode"
+                  alt="Your Entry QR Code"
+                  width="200"
+                  height="200"
+                  style="display:block;border-radius:4px;"
+                />
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:0 20px 16px;">
+                <p style="margin:0;color:#868e96;font-size:11px;font-family:monospace;word-break:break-all;">${userId}</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Next Steps -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff8e1;border-left:4px solid #f59f00;border-radius:0 8px 8px 0;margin-bottom:24px;">
+      <tr>
+        <td style="padding:16px 20px;">
+          <p style="margin:0 0 4px;color:#856404;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">📌 What's Next</p>
+          <p style="margin:0;color:#664d03;font-size:14px;line-height:1.6;">
+            Please keep this email handy and present the QR code above at the TechUtsav venue
+            along with a valid ID for entry verification.
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:0 0 8px;color:#495057;font-size:14px;line-height:1.7;">
+      We look forward to seeing you there. If you have any questions, feel free to reach out to the TechUtsav team.
+    </p>
+    <p style="margin:0;color:#868e96;font-size:14px;">Warm regards,<br /><strong style="color:#1a1a1a;">TechUtsav Team</strong></p>
+  `;
+
+  const html = emailWrapper(
+    "linear-gradient(135deg, #20c997 0%, #0ca678 100%)",
+    "🎟️",
+    "On-spot Pass",
+    body
+  );
+
+  const transporter = getEmailTransporter();
+  return transporter.sendMail({
+    from: getFromAddress(),
+    to: userEmail,
+    subject: `🎟️ Your On-spot Pass – ${passLabel} | TechUtsav`,
+    html,
+    text: `Hi ${userName}, you have been registered on-spot for ${passLabel} at TechUtsav. Your entry ID is: ${userId}`,
+    attachments: [
+      {
+        filename: "entry-qr.png",
+        content: qrBase64,
+        encoding: "base64",
+        cid: "qrcode", // matches src="cid:qrcode" in the img tag above
+      },
+    ],
   });
 }

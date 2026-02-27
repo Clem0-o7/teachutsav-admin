@@ -35,7 +35,7 @@ const userSchema = new Schema(
         paymentIdType: {
           type: String,
           required: false, // Set by admin during verification
-          enum: ["upi", "eazypay"], // UPI Transaction ID or Eazy Pay Reference Number
+          enum: ["upi", "eazypay", "onspot"], // UPI / EazyPay / On-spot
         },
         transactionNumber: { type: String, required: true },
         transactionScreenshot: { type: String, required: true }, // Azure Blob URL
@@ -50,6 +50,26 @@ const userSchema = new Schema(
         verifiedDate: Date,
         verifiedBy: String,        // Admin name who verified/rejected
         verifiedByEmail: String,   // Admin email who verified/rejected
+
+        // On-spot verification extensions
+        paymentSource: {
+          type: String,
+          enum: ["online-UPI", "online-eazypay", "onspot-UPI", "onspot-Cash"],
+          default: "online-UPI",
+        },
+        onspotCreated: { type: Boolean, default: false },
+        gateStatus: {
+          type: String,
+          enum: ["not-checked", "allowed", "used", "denied"],
+          default: "not-checked",
+        },
+        gateCheckedAt: Date,
+        gateCheckedByAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
+        gateCheckedByPanelId: String,
+        verificationSource: {
+          type: String,
+          enum: ["online", "onspot"],
+        },
       },
     ],
 
@@ -87,6 +107,8 @@ const userSchema = new Schema(
       }],
       default: []
     },
+    // Denormalized flag: user has at least one verified + activated pass
+    hasVerifiedPass: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

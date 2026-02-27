@@ -5,7 +5,6 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Fuse from "fuse.js";
 import { cn } from "@/lib/utils";
-import JSZip from "jszip";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
@@ -105,7 +104,20 @@ const collegeChartConfig = {
   },
 };
 
+const downloadAllCollegeCsvs = async () => {
+  if (!collegeStats.length) {
+    toast.error("No colleges available");
+    return;
+  }
 
+  // Small delay so browsers don't block multiple downloads
+  for (let i = 0; i < collegeStats.length; i++) {
+    downloadCollegeCsv(collegeStats[i]);
+    await new Promise((res) => setTimeout(res, 250));
+  }
+
+  toast.success(`Downloading ${collegeStats.length} CSV files`);
+};
 /* ---------------- Page ---------------- */
 
 export default function CollegesPage() {
@@ -287,67 +299,12 @@ export default function CollegesPage() {
     setDialogOpen(true);
   };
 
-const downloadCollegeCsv = (entry) => {
-  if (!entry) return;
-
-  const lines = [];
-
-  // Header
-  lines.push(`College: ${entry.name || ""}`);
-  lines.push("");
-  lines.push("Name,Phone,Department,Year,Modification (If any),Signature");
-
-  const sortedUsers = [...(entry.users || [])].sort((a, b) =>
-    (a.name || "").localeCompare(b.name || "")
-  );
-
-  sortedUsers.forEach((u) => {
-    const row = [
-      csvEscape(u.name || ""),
-      csvEscape(u.phoneNo || ""),
-      csvEscape(u.department || ""),
-      csvEscape(
-        typeof u.year === "number" || typeof u.year === "string"
-          ? String(u.year)
-          : ""
-      ),
-      "",
-      "",
-    ];
-
-    lines.push(row.join(","));
-  });
-
-  const csv = lines.join("\r\n");
-  const blob = new Blob([csv], {
-    type: "text/csv;charset=utf-8;",
-  });
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${slugifyForFilename(entry.name)}-attendance.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-};
-
-const downloadAllCollegeCsvsAsZip = async () => {
-  if (!collegeStats || collegeStats.length === 0) {
-    toast.error("No colleges available");
-    return;
-  }
-
-  const zip = new JSZip();
-
-  collegeStats.forEach((entry) => {
+  const downloadCollegeCsv = (entry) => {
+    if (!entry) return;
     const lines = [];
-
-    // Header
     lines.push(`College: ${entry.name || ""}`);
     lines.push("");
-    lines.push("Name,Phone,Department,Year,Modification (If any),Signature");
+    lines.push("Name,Department,Year,Modification (If any),Signature");
 
     const sortedUsers = [...(entry.users || [])].sort((a, b) =>
       (a.name || "").localeCompare(b.name || "")
@@ -356,7 +313,6 @@ const downloadAllCollegeCsvsAsZip = async () => {
     sortedUsers.forEach((u) => {
       const row = [
         csvEscape(u.name || ""),
-        csvEscape(u.phoneNo || ""),
         csvEscape(u.department || ""),
         csvEscape(
           typeof u.year === "number" || typeof u.year === "string"
@@ -366,34 +322,22 @@ const downloadAllCollegeCsvsAsZip = async () => {
         "",
         "",
       ];
-
       lines.push(row.join(","));
     });
 
-    const csvContent = lines.join("\r\n");
-    const filename = `${slugifyForFilename(entry.name)}-attendance.csv`;
-
-    zip.file(filename, csvContent);
-  });
-
-  toast.message("Preparing ZIP…");
-
-  const blob = await zip.generateAsync({ type: "blob" });
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `college-attendance-${
-    passFilter === "all" ? "all-passes" : `pass-${passFilter}`
-  }.zip`;
-
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-
-  toast.success(`Downloaded ${collegeStats.length} CSVs as ZIP`);
-};
+    const csv = lines.join("\r\n");
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${slugifyForFilename(entry.name)}-attendance.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const handleSplitColleges = () => {
     const x = parseInt(groupCountInput, 10);
@@ -780,14 +724,14 @@ const downloadAllCollegeCsvsAsZip = async () => {
         <div className="flex items-center gap-2">
           {/* Download ALL CSVs */}
           <Button
-  type="button"
-  variant="secondary"
-  disabled={loading || collegeStats.length === 0}
-  onClick={downloadAllCollegeCsvsAsZip}
->
-  <Download className="w-4 h-4 mr-2" />
-  Download All (ZIP)
-</Button>
+            type="button"
+            variant="secondary"
+            disabled={loading || collegeStats.length === 0}
+            onClick={downloadAllCollegeCsvs}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download All CSVs
+          </Button>
 
           {/* Per-college dropdown */}
           <DropdownMenu>

@@ -15,6 +15,7 @@ import {
   IconPresentation,
   IconBulb,
   IconBuildingCommunity,
+  IconScan,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -70,6 +71,15 @@ export function AppSidebar({
         title: "Payments",
         url: "/payments",
         icon: IconCreditCard,
+      });
+    }
+
+    // On-spot Verification - accessible to super-admin and payments-admin only
+    if (['super-admin', 'payments-admin'].includes(role)) {
+      baseItems.push({
+        title: "On-spot",
+        url: "/onspot",
+        icon: IconScan,
       });
     }
 
