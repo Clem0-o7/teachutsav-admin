@@ -385,30 +385,80 @@ export async function sendPaymentReminderEmail({ userName, userEmail, registerLi
 export async function sendIdeathonAcceptedEmail({ teamName, leaderName, leaderEmail, eventName }) {
   const body = `
     <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:22px;font-weight:700;">🎉 Congratulations!</h2>
+
     <p style="margin:0 0 24px;color:#495057;font-size:15px;line-height:1.7;">
       Hi <strong>${leaderName}</strong>,
     </p>
+
     <p style="margin:0 0 16px;color:#495057;font-size:15px;line-height:1.7;">
-      We are excited to inform you that your team <strong>${teamName}</strong> has been <span style="color:#20c997;font-weight:600;">accepted</span> for the <strong>${eventName}</strong> Ideathon at TechUtsav!
+      We are excited to inform you that your team <strong>${teamName}</strong> has been 
+      <span style="color:#20c997;font-weight:600;">accepted</span> for the 
+      <strong>${eventName}</strong> Ideathon at TechUtsav!
     </p>
+
     <p style="margin:0 0 16px;color:#495057;font-size:15px;line-height:1.7;">
       Please check your dashboard for further instructions and next steps.
     </p>
-    <p style="margin:0;color:#868e96;font-size:14px;">Best wishes,<br /><strong style="color:#1a1a1a;">TechUtsav Team</strong></p>
+
+    <!-- WhatsApp Group Section -->
+    <div style="margin:28px 0;padding:18px;border-radius:12px;background:#f1fdf8;border:1px solid #d3f9e8;">
+      <p style="margin:0 0 12px;color:#1a1a1a;font-size:15px;font-weight:600;">
+        📢 Join the Official Ideathon WhatsApp Group
+      </p>
+
+      <p style="margin:0 0 16px;color:#495057;font-size:14px;line-height:1.6;">
+        All important updates, announcements, and coordination will be shared here. 
+        Make sure at least one team member joins the group.
+      </p>
+
+      <a
+        href="https://chat.whatsapp.com/HASE3xQDSF5FRCHmj3ykWG?mode=hq2tcla"
+        target="_blank"
+        style="
+          display:inline-block;
+          padding:12px 18px;
+          background:#20c997;
+          color:#ffffff;
+          text-decoration:none;
+          font-size:14px;
+          font-weight:600;
+          border-radius:8px;
+        "
+      >
+        👉 Join WhatsApp Group
+      </a>
+
+      <p style="margin:14px 0 0;color:#868e96;font-size:12px;">
+        If the button doesn’t work, copy this link:<br/>
+        <span style="word-break:break-all;">
+          https://chat.whatsapp.com/HASE3xQDSF5FRCHmj3ykWG
+        </span>
+      </p>
+    </div>
+
+    <p style="margin:0;color:#868e96;font-size:14px;">
+      Best wishes,<br />
+      <strong style="color:#1a1a1a;">TechUtsav Team</strong>
+    </p>
   `;
+
   const html = emailWrapper(
     "linear-gradient(135deg, #20c997 0%, #0ca678 100%)",
     "🎉",
     "Ideathon Submission Accepted",
     body
   );
+
   const transporter = getEmailTransporter();
   return transporter.sendMail({
     from: getFromAddress(),
     to: leaderEmail,
     subject: `🎉 Ideathon Submission Accepted | TechUtsav`,
     html,
-    text: `Hi ${leaderName}, your team ${teamName} has been accepted for the ${eventName} Ideathon at TechUtsav!`,
+    text: `Hi ${leaderName}, your team ${teamName} has been accepted for the ${eventName} Ideathon at TechUtsav!
+
+Join the official WhatsApp group for updates:
+https://chat.whatsapp.com/HASE3xQDSF5FRCHmj3ykWG`,
   });
 }
 
@@ -456,30 +506,80 @@ export async function sendIdeathonRejectedEmail({ teamName, leaderName, leaderEm
 export async function sendPaperAcceptedEmail({ authorName, authorEmail, title }) {
   const body = `
     <h2 style="margin:0 0 6px;color:#1a1a1a;font-size:22px;font-weight:700;">🎉 Paper Accepted!</h2>
+
     <p style="margin:0 0 24px;color:#495057;font-size:15px;line-height:1.7;">
       Hi <strong>${authorName}</strong>,
     </p>
+
     <p style="margin:0 0 16px;color:#495057;font-size:15px;line-height:1.7;">
-      We are pleased to inform you that your paper presentation <strong>"${title}"</strong> has been <span style="color:#20c997;font-weight:600;">accepted</span> for TechUtsav!
+      We are pleased to inform you that your paper presentation 
+      <strong>"${title}"</strong> has been 
+      <span style="color:#20c997;font-weight:600;">accepted</span> for TechUtsav!
     </p>
+
     <p style="margin:0 0 16px;color:#495057;font-size:15px;line-height:1.7;">
       Please check your dashboard for presentation schedule, venue details, and further instructions.
     </p>
-    <p style="margin:0;color:#868e96;font-size:14px;">Congratulations,<br /><strong style="color:#1a1a1a;">TechUtsav Team</strong></p>
+
+    <!-- WhatsApp Group Section -->
+    <div style="margin:28px 0;padding:18px;border-radius:12px;background:#f1fdf8;border:1px solid #d3f9e8;">
+      <p style="margin:0 0 12px;color:#1a1a1a;font-size:15px;font-weight:600;">
+        📢 Join the Official Paper Presentation WhatsApp Group
+      </p>
+
+      <p style="margin:0 0 16px;color:#495057;font-size:14px;line-height:1.6;">
+        All presentation-related announcements, schedules, and coordination will be shared in this group.
+        Please ensure that at least one author joins.
+      </p>
+
+      <a
+        href="https://chat.whatsapp.com/CHYmagPV9a79wtZgrmnwxy?mode=gi_t"
+        target="_blank"
+        style="
+          display:inline-block;
+          padding:12px 18px;
+          background:#20c997;
+          color:#ffffff;
+          text-decoration:none;
+          font-size:14px;
+          font-weight:600;
+          border-radius:8px;
+        "
+      >
+        👉 Join WhatsApp Group
+      </a>
+
+      <p style="margin:14px 0 0;color:#868e96;font-size:12px;">
+        If the button doesn’t work, copy this link:<br/>
+        <span style="word-break:break-all;">
+          https://chat.whatsapp.com/CHYmagPV9a79wtZgrmnwxy
+        </span>
+      </p>
+    </div>
+
+    <p style="margin:0;color:#868e96;font-size:14px;">
+      Congratulations,<br />
+      <strong style="color:#1a1a1a;">TechUtsav Team</strong>
+    </p>
   `;
+
   const html = emailWrapper(
     "linear-gradient(135deg, #20c997 0%, #0ca678 100%)",
     "🎉",
     "Paper Presentation Accepted",
     body
   );
+
   const transporter = getEmailTransporter();
   return transporter.sendMail({
     from: getFromAddress(),
     to: authorEmail,
     subject: `🎉 Paper Presentation Accepted | TechUtsav`,
     html,
-    text: `Hi ${authorName}, your paper presentation '${title}' has been accepted for TechUtsav!`,
+    text: `Hi ${authorName}, your paper presentation "${title}" has been accepted for TechUtsav!
+
+Join the official Paper Presentation WhatsApp group for updates:
+https://chat.whatsapp.com/CHYmagPV9a79wtZgrmnwxy`,
   });
 }
 

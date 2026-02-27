@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Fuse from "fuse.js";
 import { cn } from "@/lib/utils";
+import JSZip from "jszip";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
@@ -103,6 +104,7 @@ const collegeChartConfig = {
     color: "var(--primary)",
   },
 };
+
 
 /* ---------------- Page ---------------- */
 
@@ -285,12 +287,67 @@ export default function CollegesPage() {
     setDialogOpen(true);
   };
 
-  const downloadCollegeCsv = (entry) => {
-    if (!entry) return;
+const downloadCollegeCsv = (entry) => {
+  if (!entry) return;
+
+  const lines = [];
+
+  // Header
+  lines.push(`College: ${entry.name || ""}`);
+  lines.push("");
+  lines.push("Name,Phone,Department,Year,Modification (If any),Signature");
+
+  const sortedUsers = [...(entry.users || [])].sort((a, b) =>
+    (a.name || "").localeCompare(b.name || "")
+  );
+
+  sortedUsers.forEach((u) => {
+    const row = [
+      csvEscape(u.name || ""),
+      csvEscape(u.phoneNo || ""),
+      csvEscape(u.department || ""),
+      csvEscape(
+        typeof u.year === "number" || typeof u.year === "string"
+          ? String(u.year)
+          : ""
+      ),
+      "",
+      "",
+    ];
+
+    lines.push(row.join(","));
+  });
+
+  const csv = lines.join("\r\n");
+  const blob = new Blob([csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${slugifyForFilename(entry.name)}-attendance.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+const downloadAllCollegeCsvsAsZip = async () => {
+  if (!collegeStats || collegeStats.length === 0) {
+    toast.error("No colleges available");
+    return;
+  }
+
+  const zip = new JSZip();
+
+  collegeStats.forEach((entry) => {
     const lines = [];
+
+    // Header
     lines.push(`College: ${entry.name || ""}`);
     lines.push("");
-    lines.push("Name,Department,Year,Modification (If any),Signature");
+    lines.push("Name,Phone,Department,Year,Modification (If any),Signature");
 
     const sortedUsers = [...(entry.users || [])].sort((a, b) =>
       (a.name || "").localeCompare(b.name || "")
@@ -299,6 +356,7 @@ export default function CollegesPage() {
     sortedUsers.forEach((u) => {
       const row = [
         csvEscape(u.name || ""),
+        csvEscape(u.phoneNo || ""),
         csvEscape(u.department || ""),
         csvEscape(
           typeof u.year === "number" || typeof u.year === "string"
@@ -308,22 +366,34 @@ export default function CollegesPage() {
         "",
         "",
       ];
+
       lines.push(row.join(","));
     });
 
-    const csv = lines.join("\r\n");
-    const blob = new Blob([csv], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${slugifyForFilename(entry.name)}-attendance.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+    const csvContent = lines.join("\r\n");
+    const filename = `${slugifyForFilename(entry.name)}-attendance.csv`;
+
+    zip.file(filename, csvContent);
+  });
+
+  toast.message("Preparing ZIP…");
+
+  const blob = await zip.generateAsync({ type: "blob" });
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `college-attendance-${
+    passFilter === "all" ? "all-passes" : `pass-${passFilter}`
+  }.zip`;
+
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  toast.success(`Downloaded ${collegeStats.length} CSVs as ZIP`);
+};
 
   const handleSplitColleges = () => {
     const x = parseInt(groupCountInput, 10);
@@ -670,148 +740,167 @@ export default function CollegesPage() {
             </Card>
           </div>
 
+      
           {/* Analytics Controls */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Download className="w-4 h-4" />
-                  College-wise CSV
-                </CardTitle>
-                <CardDescription>
-                  Download print-friendly attendance sheets per college. Optionally filter by pass type first.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Pass filter (optional)
-                    </p>
-                    <Select
-                      value={passFilter}
-                      onValueChange={setPassFilter}
-                    >
-                      <SelectTrigger className="w-40 h-9">
-                        <SelectValue placeholder="All passes" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All passes</SelectItem>
-                        <SelectItem value="1">Pass 1</SelectItem>
-                        <SelectItem value="2">Pass 2</SelectItem>
-                        <SelectItem value="3">Pass 3</SelectItem>
-                        <SelectItem value="4">Pass 4</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+<div className="grid gap-6 lg:grid-cols-2">
+  {/* College-wise CSV */}
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        <Download className="w-4 h-4" />
+        College-wise CSV
+      </CardTitle>
+      <CardDescription>
+        Download print-friendly attendance sheets per college. Optionally filter by pass type first.
+      </CardDescription>
+    </CardHeader>
 
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        disabled={loading || collegeStats.length === 0}
-                      >
-                        <Download className="w-4 h-4 mr-2" />
-                        Download CSV
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-72">
-                      <DropdownMenuLabel>Per-college CSV</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {collegeStats.length === 0 ? (
-                        <DropdownMenuItem disabled>
-                          No colleges available
-                        </DropdownMenuItem>
-                      ) : (
-                        collegeStats.map((entry) => (
-                          <DropdownMenuItem
-                            key={entry.key}
-                            onClick={() => downloadCollegeCsv(entry)}
-                          >
-                            <span className="truncate flex-1">{entry.name}</span>
-                            <span className="text-xs text-muted-foreground ml-2">
-                              {entry.count} user{entry.count === 1 ? "" : "s"}
-                            </span>
-                          </DropdownMenuItem>
-                        ))
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+    <CardContent className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* Pass filter */}
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">
+            Pass filter (optional)
+          </p>
+          <Select value={passFilter} onValueChange={setPassFilter}>
+            <SelectTrigger className="w-40 h-9">
+              <SelectValue placeholder="All passes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All passes</SelectItem>
+              <SelectItem value="1">Pass 1</SelectItem>
+              <SelectItem value="2">Pass 2</SelectItem>
+              <SelectItem value="3">Pass 3</SelectItem>
+              <SelectItem value="4">Pass 4</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-                <p className="text-xs text-muted-foreground">
-                  CSV format: row 1 &ldquo;College: &lt;name&gt;&rdquo;, row 3 onwards:{" "}
-                  <span className="font-mono">
-                    Name | Department | Year | Modification (If any) | Signature
-                  </span>
-                  .
-                </p>
-              </CardContent>
-            </Card>
+        {/* Download buttons */}
+        <div className="flex items-center gap-2">
+          {/* Download ALL CSVs */}
+          <Button
+  type="button"
+  variant="secondary"
+  disabled={loading || collegeStats.length === 0}
+  onClick={downloadAllCollegeCsvsAsZip}
+>
+  <Download className="w-4 h-4 mr-2" />
+  Download All (ZIP)
+</Button>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Split Colleges Into Groups</CardTitle>
-                <CardDescription>
-                  Balance college-wise counts into groups for manual verification or room allocation.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="Number of groups (X)"
-                    className="sm:max-w-[200px]"
-                    value={groupCountInput}
-                    onChange={(e) => setGroupCountInput(e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={handleSplitColleges}
-                    disabled={loading || collegeStats.length === 0}
+          {/* Per-college dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                disabled={loading || collegeStats.length === 0}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download CSV
+              </Button>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent className="w-72">
+              <DropdownMenuLabel>Per-college CSV</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {collegeStats.length === 0 ? (
+                <DropdownMenuItem disabled>
+                  No colleges available
+                </DropdownMenuItem>
+              ) : (
+                collegeStats.map((entry) => (
+                  <DropdownMenuItem
+                    key={entry.key}
+                    onClick={() => downloadCollegeCsv(entry)}
                   >
-                    Split Into Groups
-                  </Button>
-                </div>
+                    <span className="truncate flex-1">{entry.name}</span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {entry.count} user{entry.count === 1 ? "" : "s"}
+                    </span>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
 
-                {splitGroups.length > 0 && (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {splitGroups.map((group) => (
-                      <div
-                        key={group.id}
-                        className="rounded-md border border-border p-3 space-y-1"
-                      >
-                        <p className="text-sm font-semibold">
-                          Group {group.id}
-                        </p>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Total: {group.total} user{group.total === 1 ? "" : "s"}
-                        </p>
-                        {group.colleges.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            No colleges assigned.
-                          </p>
-                        ) : (
-                          <ul className="space-y-0.5 text-xs">
-                            {group.colleges.map((c) => (
-                              <li key={c.key}>
-                                {c.name}{" "}
-                                <span className="text-muted-foreground">
-                                  ({c.count})
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+      <p className="text-xs text-muted-foreground">
+        CSV format: row 1 &ldquo;College: &lt;name&gt;&rdquo;, row 3 onwards:{" "}
+        <span className="font-mono">
+          Name | Department | Year | Modification (If any) | Signature
+        </span>
+        .
+      </p>
+    </CardContent>
+  </Card>
+
+  {/* Split Colleges */}
+  <Card>
+    <CardHeader>
+      <CardTitle>Split Colleges Into Groups</CardTitle>
+      <CardDescription>
+        Balance college-wise counts into groups for manual verification or room allocation.
+      </CardDescription>
+    </CardHeader>
+
+    <CardContent className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Input
+          type="number"
+          min={1}
+          placeholder="Number of groups (X)"
+          className="sm:max-w-[200px]"
+          value={groupCountInput}
+          onChange={(e) => setGroupCountInput(e.target.value)}
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={handleSplitColleges}
+          disabled={loading || collegeStats.length === 0}
+        >
+          Split Into Groups
+        </Button>
+      </div>
+
+      {splitGroups.length > 0 && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {splitGroups.map((group) => (
+            <div
+              key={group.id}
+              className="rounded-md border border-border p-3 space-y-1"
+            >
+              <p className="text-sm font-semibold">
+                Group {group.id}
+              </p>
+              <p className="text-xs text-muted-foreground mb-1">
+                Total: {group.total} user{group.total === 1 ? "" : "s"}
+              </p>
+              {group.colleges.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No colleges assigned.
+                </p>
+              ) : (
+                <ul className="space-y-0.5 text-xs">
+                  {group.colleges.map((c) => (
+                    <li key={c.key}>
+                      {c.name}{" "}
+                      <span className="text-muted-foreground">
+                        ({c.count})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  </Card>
+</div>
 
           {/* Distribution Chart */}
           <Card>
