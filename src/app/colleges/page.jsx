@@ -5,7 +5,8 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Fuse from "fuse.js";
 import { cn } from "@/lib/utils";
-
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import {
@@ -104,20 +105,7 @@ const collegeChartConfig = {
   },
 };
 
-const downloadAllCollegeCsvs = async () => {
-  if (!collegeStats.length) {
-    toast.error("No colleges available");
-    return;
-  }
 
-  // Small delay so browsers don't block multiple downloads
-  for (let i = 0; i < collegeStats.length; i++) {
-    downloadCollegeCsv(collegeStats[i]);
-    await new Promise((res) => setTimeout(res, 250));
-  }
-
-  toast.success(`Downloading ${collegeStats.length} CSV files`);
-};
 /* ---------------- Page ---------------- */
 
 export default function CollegesPage() {
@@ -299,45 +287,73 @@ export default function CollegesPage() {
     setDialogOpen(true);
   };
 
-  const downloadCollegeCsv = (entry) => {
-    if (!entry) return;
-    const lines = [];
-    lines.push(`College: ${entry.name || ""}`);
-    lines.push("");
-    lines.push("Name,Department,Year,Modification (If any),Signature");
+// Escape CSV values safely
+const csvEscape = (str) => {
+  if (!str) return "";
+  if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+};
 
-    const sortedUsers = [...(entry.users || [])].sort((a, b) =>
-      (a.name || "").localeCompare(b.name || "")
-    );
+// Helper to slugify filenames
+const slugifyForFilename = (str) =>
+  (str || "college")
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_|_$/g, "")
+    .toLowerCase();
 
-    sortedUsers.forEach((u) => {
-      const row = [
-        csvEscape(u.name || ""),
-        csvEscape(u.department || ""),
-        csvEscape(
-          typeof u.year === "number" || typeof u.year === "string"
-            ? String(u.year)
-            : ""
-        ),
-        "",
-        "",
-      ];
-      lines.push(row.join(","));
-    });
+// Modified single college CSV generator
+const downloadCollegeCsv = (entry) => {
+  if (!entry) return;
 
-    const csv = lines.join("\r\n");
-    const blob = new Blob([csv], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${slugifyForFilename(entry.name)}-attendance.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const lines = [];
+  lines.push(`College: ${entry.name || ""}`);
+  lines.push("");
+  lines.push("Name,Department,Year,Phone Number,Modification (If any),Signature");
+
+  const sortedUsers = [...(entry.users || [])].sort((a, b) =>
+    (a.name || "").localeCompare(b.name || "")
+  );
+
+  sortedUsers.forEach((u) => {
+    const row = [
+      csvEscape(u.name || ""),
+      csvEscape(u.department || ""),
+      typeof u.year === "number" || typeof u.year === "string" ? String(u.year) : "",
+      csvEscape(u.phoneNo || ""),
+      "",
+      "",
+    ];
+    lines.push(row.join(","));
+  });
+
+  return lines.join("\r\n"); // Return CSV string instead of directly downloading
+};
+
+// Modified "all colleges" download as single ZIP
+const downloadAllCollegeCsvs = async () => {
+  if (!collegeStats.length) {
+    toast.error("No colleges available");
+    return;
+  }
+
+  const zip = new JSZip();
+
+  collegeStats.forEach((college) => {
+    const csvContent = downloadCollegeCsv(college); // reuse the single college CSV function
+    const filename = `${slugifyForFilename(college.name)}-attendance.csv`;
+    zip.file(filename, csvContent);
+  });
+
+  const blob = await zip.generateAsync({ type: "blob" });
+  saveAs(blob, "All_Colleges_Attendance.zip");
+
+  toast.success(`Downloaded ${collegeStats.length} CSV files in a single ZIP`);
+};
 
   const handleSplitColleges = () => {
     const x = parseInt(groupCountInput, 10);
