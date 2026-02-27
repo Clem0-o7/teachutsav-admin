@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import dynamic from "next/dynamic";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
@@ -30,15 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-// Dynamic import with correct syntax
-const QrReader = dynamic(
-  async () => {
-    const mod = await import("react-qr-reader");
-    return mod.QrReader; // <- use the named export
-  },
-  { ssr: false }
-);
 
 const PASS_LABELS = {
   1: "Pass 1 – Offline Workshop And Events",
@@ -103,7 +93,6 @@ export default function OnspotPage() {
   const [profileCollegeSearch, setProfileCollegeSearch] = useState("");
   const [manualCollegeSearch, setManualCollegeSearch] = useState("");
   const [verifyingPayment, setVerifyingPayment] = useState(false);
-  const [cameraOn, setCameraOn] = useState(false);
 
   const currentPass = useMemo(() => {
     if (!userData || !Array.isArray(userData.passes)) return null;
@@ -180,7 +169,6 @@ export default function OnspotPage() {
       physicalSignatureCollected: false,
       detailsCorrectedOnPaper: false,
     });
-    // NOTE: intentionally NOT clearing scanValue here
   };
 
   const populateProfileForm = (payload) => {
@@ -444,10 +432,7 @@ export default function OnspotPage() {
               <Button
                 type="button"
                 variant={manualMode ? "outline" : "secondary"}
-                onClick={() => {
-                  setManualMode(false);
-                  resetState();
-                }}
+                onClick={() => { setManualMode(false); resetState(); }}
               >
                 <ScanLine className="w-4 h-4 mr-2" />
                 Scan & Verify
@@ -455,10 +440,7 @@ export default function OnspotPage() {
               <Button
                 type="button"
                 variant={manualMode ? "default" : "outline"}
-                onClick={() => {
-                  setManualMode(true);
-                  resetState();
-                }}
+                onClick={() => { setManualMode(true); resetState(); }}
               >
                 <UserPlus className="w-4 h-4 mr-2" />
                 Register Walk-in
@@ -471,16 +453,13 @@ export default function OnspotPage() {
               <CardHeader>
                 <CardTitle>Scan / Lookup Pass</CardTitle>
                 <CardDescription>
-                  Scan a QR code or paste the QR payload / Mongo ObjectId to load a user.
+                  Paste the scanned QR value or Mongo ObjectId to load a user.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <Button type="button" onClick={() => setCameraOn(!cameraOn)}>
-                    {cameraOn ? "Stop Camera" : "Open Camera"}
-                  </Button>
                   <Input
-                    placeholder="Scan QR or paste ID / JSON payload"
+                    placeholder="Paste scanned ID or JSON payload"
                     value={scanValue}
                     onChange={(e) => setScanValue(e.target.value)}
                     className="flex-1"
@@ -497,23 +476,6 @@ export default function OnspotPage() {
                     {loadingUser ? "Loading…" : "Fetch User"}
                   </Button>
                 </div>
-
-                {cameraOn && (
-                  <div className="w-full h-64 border mt-2 overflow-hidden rounded-md">
-                    <QrReader
-                      constraints={{ facingMode: "environment" }}
-                      onResult={(result) => {
-                        if (result) {
-                          const text = result?.text;
-                          setScanValue(text);
-                          handleScanSubmit(text);
-                          setCameraOn(false);
-                        }
-                      }}
-                      style={{ width: "100%", height: "100%" }}
-                    />
-                  </div>
-                )}
 
                 {userData && (
                   <div className="grid gap-4 lg:grid-cols-[2fr,3fr]">
@@ -544,15 +506,7 @@ export default function OnspotPage() {
                               <MapPin className="w-3 h-3" />
                               <span>
                                 {userData.collegeResolved
-                                  ? `${userData.collegeResolved.name}${
-                                      userData.collegeResolved.city
-                                        ? `, ${userData.collegeResolved.city}`
-                                        : ""
-                                    }${
-                                      userData.collegeResolved.state
-                                        ? `, ${userData.collegeResolved.state}`
-                                        : ""
-                                    }`
+                                  ? `${userData.collegeResolved.name}${userData.collegeResolved.city ? `, ${userData.collegeResolved.city}` : ""}${userData.collegeResolved.state ? `, ${userData.collegeResolved.state}` : ""}`
                                   : userData.user.college || "Unknown / Unmapped"}
                               </span>
                             </p>
@@ -560,10 +514,7 @@ export default function OnspotPage() {
                           <div className="mt-2">
                             <Badge
                               variant={profileComplete ? "default" : "outline"}
-                              className={cn(
-                                "text-xs",
-                                !profileComplete && "border-amber-500 text-amber-700"
-                              )}
+                              className={cn("text-xs", !profileComplete && "border-amber-500 text-amber-700")}
                             >
                               {profileComplete ? "Profile Complete" : "Profile Incomplete"}
                             </Badge>
@@ -582,38 +533,28 @@ export default function OnspotPage() {
                           <Input
                             placeholder="Name"
                             value={profileForm.name}
-                            onChange={(e) =>
-                              setProfileForm((f) => ({ ...f, name: e.target.value }))
-                            }
+                            onChange={(e) => setProfileForm((f) => ({ ...f, name: e.target.value }))}
                           />
                           <Input
                             placeholder="Email"
                             value={profileForm.email}
-                            onChange={(e) =>
-                              setProfileForm((f) => ({ ...f, email: e.target.value }))
-                            }
+                            onChange={(e) => setProfileForm((f) => ({ ...f, email: e.target.value }))}
                           />
                           <Input
                             placeholder="Phone"
                             value={profileForm.phoneNo}
-                            onChange={(e) =>
-                              setProfileForm((f) => ({ ...f, phoneNo: e.target.value }))
-                            }
+                            onChange={(e) => setProfileForm((f) => ({ ...f, phoneNo: e.target.value }))}
                           />
                           <div className="grid grid-cols-2 gap-2">
                             <Input
                               placeholder="Year"
                               value={profileForm.year}
-                              onChange={(e) =>
-                                setProfileForm((f) => ({ ...f, year: e.target.value }))
-                              }
+                              onChange={(e) => setProfileForm((f) => ({ ...f, year: e.target.value }))}
                             />
                             <Input
                               placeholder="Department"
                               value={profileForm.department}
-                              onChange={(e) =>
-                                setProfileForm((f) => ({ ...f, department: e.target.value }))
-                              }
+                              onChange={(e) => setProfileForm((f) => ({ ...f, department: e.target.value }))}
                             />
                           </div>
 
@@ -624,9 +565,7 @@ export default function OnspotPage() {
                             {profileForm.collegeId ? (
                               <div className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs">
                                 <span className="flex-1 truncate">
-                                  {colleges.find(
-                                    (c) => String(c._id) === String(profileForm.collegeId)
-                                  )?.name ||
+                                  {colleges.find((c) => String(c._id) === String(profileForm.collegeId))?.name ||
                                     userData?.collegeResolved?.name ||
                                     userData?.user?.college ||
                                     "Selected"}
@@ -687,33 +626,18 @@ export default function OnspotPage() {
                                   <Input
                                     placeholder="New college name"
                                     value={profileForm.newCollegeName}
-                                    onChange={(e) =>
-                                      setProfileForm((f) => ({
-                                        ...f,
-                                        newCollegeName: e.target.value,
-                                      }))
-                                    }
+                                    onChange={(e) => setProfileForm((f) => ({ ...f, newCollegeName: e.target.value }))}
                                   />
                                   <div className="grid grid-cols-2 gap-2">
                                     <Input
                                       placeholder="City"
                                       value={profileForm.newCollegeCity}
-                                      onChange={(e) =>
-                                        setProfileForm((f) => ({
-                                          ...f,
-                                          newCollegeCity: e.target.value,
-                                        }))
-                                      }
+                                      onChange={(e) => setProfileForm((f) => ({ ...f, newCollegeCity: e.target.value }))}
                                     />
                                     <Input
                                       placeholder="State"
                                       value={profileForm.newCollegeState}
-                                      onChange={(e) =>
-                                        setProfileForm((f) => ({
-                                          ...f,
-                                          newCollegeState: e.target.value,
-                                        }))
-                                      }
+                                      onChange={(e) => setProfileForm((f) => ({ ...f, newCollegeState: e.target.value }))}
                                     />
                                   </div>
                                 </div>
@@ -842,16 +766,10 @@ export default function OnspotPage() {
                                     id="chk-signature"
                                     checked={checklist.physicalSignatureCollected}
                                     onCheckedChange={(v) =>
-                                      setChecklist((c) => ({
-                                        ...c,
-                                        physicalSignatureCollected: Boolean(v),
-                                      }))
+                                      setChecklist((c) => ({ ...c, physicalSignatureCollected: Boolean(v) }))
                                     }
                                   />
-                                  <label
-                                    htmlFor="chk-signature"
-                                    className="text-xs leading-tight cursor-pointer"
-                                  >
+                                  <label htmlFor="chk-signature" className="text-xs leading-tight cursor-pointer">
                                     Physical signature collected on roster sheet
                                   </label>
                                 </div>
@@ -860,16 +778,10 @@ export default function OnspotPage() {
                                     id="chk-details"
                                     checked={checklist.detailsCorrectedOnPaper}
                                     onCheckedChange={(v) =>
-                                      setChecklist((c) => ({
-                                        ...c,
-                                        detailsCorrectedOnPaper: Boolean(v),
-                                      }))
+                                      setChecklist((c) => ({ ...c, detailsCorrectedOnPaper: Boolean(v) }))
                                     }
                                   />
-                                  <label
-                                    htmlFor="chk-details"
-                                    className="text-xs leading-tight cursor-pointer"
-                                  >
+                                  <label htmlFor="chk-details" className="text-xs leading-tight cursor-pointer">
                                     Details corrected on paper & confirmed with user
                                   </label>
                                 </div>
@@ -935,16 +847,12 @@ export default function OnspotPage() {
                     <Input
                       placeholder="Confirm Email"
                       value={manualForm.confirmEmail}
-                      onChange={(e) =>
-                        setManualForm((f) => ({ ...f, confirmEmail: e.target.value }))
-                      }
+                      onChange={(e) => setManualForm((f) => ({ ...f, confirmEmail: e.target.value }))}
                     />
                     <Input
                       placeholder="Phone"
                       value={manualForm.phoneNo}
-                      onChange={(e) =>
-                        setManualForm((f) => ({ ...f, phoneNo: e.target.value }))
-                      }
+                      onChange={(e) => setManualForm((f) => ({ ...f, phoneNo: e.target.value }))}
                     />
                   </div>
                   <div className="space-y-2">
@@ -952,16 +860,12 @@ export default function OnspotPage() {
                       <Input
                         placeholder="Year"
                         value={manualForm.year}
-                        onChange={(e) =>
-                          setManualForm((f) => ({ ...f, year: e.target.value }))
-                        }
+                        onChange={(e) => setManualForm((f) => ({ ...f, year: e.target.value }))}
                       />
                       <Input
                         placeholder="Department"
                         value={manualForm.department}
-                        onChange={(e) =>
-                          setManualForm((f) => ({ ...f, department: e.target.value }))
-                        }
+                        onChange={(e) => setManualForm((f) => ({ ...f, department: e.target.value }))}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-2 items-center">
@@ -981,9 +885,7 @@ export default function OnspotPage() {
                       </Select>
                       <Select
                         value={manualForm.paymentSource}
-                        onValueChange={(v) =>
-                          setManualForm((f) => ({ ...f, paymentSource: v }))
-                        }
+                        onValueChange={(v) => setManualForm((f) => ({ ...f, paymentSource: v }))}
                       >
                         <SelectTrigger className="h-9 text-xs">
                           <SelectValue placeholder="Payment source" />
@@ -1002,9 +904,7 @@ export default function OnspotPage() {
                       {manualForm.collegeId ? (
                         <div className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs">
                           <span className="flex-1 truncate">
-                            {colleges.find(
-                              (c) => String(c._id) === String(manualForm.collegeId)
-                            )?.name || "Selected"}
+                            {colleges.find((c) => String(c._id) === String(manualForm.collegeId))?.name || "Selected"}
                           </span>
                           <Button
                             type="button"
@@ -1062,33 +962,18 @@ export default function OnspotPage() {
                             <Input
                               placeholder="New college name"
                               value={manualForm.newCollegeName}
-                              onChange={(e) =>
-                                setManualForm((f) => ({
-                                  ...f,
-                                  newCollegeName: e.target.value,
-                                }))
-                              }
+                              onChange={(e) => setManualForm((f) => ({ ...f, newCollegeName: e.target.value }))}
                             />
                             <div className="grid grid-cols-2 gap-2">
                               <Input
                                 placeholder="City"
                                 value={manualForm.newCollegeCity}
-                                onChange={(e) =>
-                                  setManualForm((f) => ({
-                                    ...f,
-                                    newCollegeCity: e.target.value,
-                                  }))
-                                }
+                                onChange={(e) => setManualForm((f) => ({ ...f, newCollegeCity: e.target.value }))}
                               />
                               <Input
                                 placeholder="State"
                                 value={manualForm.newCollegeState}
-                                onChange={(e) =>
-                                  setManualForm((f) => ({
-                                    ...f,
-                                    newCollegeState: e.target.value,
-                                  }))
-                                }
+                                onChange={(e) => setManualForm((f) => ({ ...f, newCollegeState: e.target.value }))}
                               />
                             </div>
                           </div>
